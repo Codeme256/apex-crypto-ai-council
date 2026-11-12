@@ -29,9 +29,13 @@ describe("Evidence Council",()=>{
   const r=evaluateCouncil({...args,quote:{...args.quote,source:"Coinbase Exchange"}});
   expect(r.blockers.join(" ")).toContain("sources differ");
  });
- it("rejects gaps in candle evidence",()=>{
+ it("flags gaps and blocks trading while preserving an informational assessment",()=>{
   const arr=[...candles];arr.splice(20,1);
-  expect(()=>evaluateCouncil({...args,candles:arr})).toThrow("Missing or irregular");
+  const result=evaluateCouncil({...args,candles:arr});
+  expect(result.blockers.join(" ")).toContain("Missing or irregular candle");
+  expect(result.verdict).toBe("WAIT");
+  expect(result.riskAllowed).toBe(false);
+  expect(result.agents.length).toBe(6);
  });
  it("refuses short histories and unsupported timeframes",()=>{
   expect(()=>evaluateCouncil({...args,candles:candles.slice(-20)})).toThrow("65");
