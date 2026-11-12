@@ -50,3 +50,32 @@ button,select,input { font:inherit; } button { cursor:pointer; } button:disabled
 a.nav-item {text-decoration:none;}
 @media(max-width:1050px){.paper-stats{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:700px){.paper-columns{grid-template-columns:1fr}.paper-trade-row .btn{flex:1;min-width:120px}.paper-trade-row>div:first-child,.paper-trade-row input{width:100%;}.paper-stats{gap:8px}}
+
+/* APEX evidence council: agent movement denotes a real in-flight API request. */
+.council-meta{display:flex;flex-wrap:wrap;align-items:center;gap:9px;margin:10px 0 15px}
+.council-source{font:11px 'DM Mono',monospace;color:#96b4c2;line-height:1.7}
+.council-indicators{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:15px 0}
+.council-indicators>div{padding:12px;border-radius:9px;background:#0b1d2a;border:1px solid #234151;min-width:0}
+.council-indicators span,.council-indicators strong{display:block}
+.council-indicators span{font:10px 'DM Mono',monospace;color:#8eabc1}
+.council-indicators strong{font-size:15px;margin-top:8px;overflow-wrap:anywhere}
+.council-agents{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.council-agent{border:1px solid #244151;border-radius:12px;padding:16px;background:linear-gradient(145deg,#0c2130,#0a111e);min-width:0}
+.council-agent-head{display:flex;align-items:center;gap:10px}
+.council-agent-head>div{flex:1;min-width:0}
+.council-agent-head strong{letter-spacing:.07em;color:#b8f7fb;font-size:12px}
+.council-agent-head p{margin:3px 0 0;color:#8eabc1;font-size:10px}
+.council-agent-avatar{display:grid;place-items:center;flex:0 0 28px;height:28px;border-radius:100%;background:#123e4c;border:1px solid #1d778b;color:#8ff4fa;font:12px 'DM Mono',monospace}
+.council-agent>p{font-size:12px;line-height:1.6;color:#d4e4eb;min-height:60px}
+.council-agent ul,.council-blockers ul{margin:10px 0 0;padding-left:17px;font-size:11px;line-height:1.8;color:#99b7c7}
+.council-veto{color:#ff909d;border-color:#753748}
+.council-blockers{margin-top:13px;padding:12px;border:1px solid #684150;border-radius:10px;background:#231621;font-size:12px;color:#ffc0c7}
+.council-blockers ul{color:#ffb1bb}
+.council-wait{font-size:12px;color:#c2d5e0;padding:15px}
+.council-agent-busy{animation:council-activity 1.6s ease-in-out infinite alternate}
+.council-agent-busy:nth-child(2n){animation-delay:.35s}
+.council-agent-busy:nth-child(3n){animation-delay:.65s}
+@keyframes council-activity{from{border-color:#244151;box-shadow:0 0 0 0 transparent}to{border-color:#29acba;box-shadow:0 0 16px #27d6e018}}
+@media(max-width:1100px){.council-agents{grid-template-columns:repeat(2,minmax(0,1fr))}.council-indicators{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){.council-agents{grid-template-columns:1fr}.council-indicators{grid-template-columns:repeat(2,minmax(0,1fr))}.council-section .panel-head{flex-wrap:wrap}.council-agent>p{min-height:0}}
+@media(prefers-reduced-motion:reduce){.council-agent-busy{animation:none;border-color:#29acba}}
