@@ -226,7 +226,7 @@ export default function App() {
         {error && <div className="error-box" role="alert">Market feed: {error}</div>}
         <section id="paper-desk" className="panel" style={{marginTop:0,marginBottom:16}}>
           <div className="panel-head"><div><h2 className="panel-title">Spot Paper Trading Desk</h2>
-          <div className="panel-subtitle">Virtual 10,000 USDT starting balance · isolated cloud wallet per verified email</div></div>
+          <div className="panel-subtitle">Virtual 10,000 USDT starting balance · isolated cloud wallet per private account</div></div>
           <span className="status-pill">{paper.killSwitch?"PAPER HALTED":"PAPER ACTIVE"}</span></div>
           <div className="paper-stats">
            <Kpi label="Paper cash" value={fmt(paper.cash)+" USDT"} foot="Virtual, not exchange funds"/>
