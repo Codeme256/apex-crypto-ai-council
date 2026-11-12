@@ -57,19 +57,29 @@ export default function App() {
     try{
       const session=await api.registerOrLogin();
       setUser(session.user);
-      const [wallet,connection]=await Promise.all([api.privatePaper(),api.binanceStatus()]);
-      setPaper(wallet.wallet);setBinanceStatus(connection);
+      // An optional paper-wallet or Binance status error must not log out a valid account.
+      const [wallet,connection]=await Promise.allSettled([api.privatePaper(),api.binanceStatus()]);
+      if(wallet.status==="fulfilled")setPaper(wallet.value.wallet);
+      if(connection.status==="fulfilled")setBinanceStatus(connection.value);
+      return true;
     }catch{
       setUser(null);setBinanceStatus(null);setPaper(initialPaper());
+      return false;
     }finally{setSessionChecked(true);}
   },[]);
   useEffect(()=>{void loadMySession();},[loadMySession]);
   const submitAuth=async(event:React.FormEvent)=>{
     event.preventDefault();setAuthBusy(true);setAuthError("");
     try{
-      if(authMode==="register")await api.emailSignup(authEmail,authPassword);
-      else await api.emailLogin(authEmail,authPassword);
-      setAuthPassword("");await loadMySession();
+      const result=authMode==="register"?
+        await api.emailSignup(authEmail,authPassword):
+        await api.emailLogin(authEmail,authPassword);
+      setUser(result.user);
+      setAuthPassword("");
+      const authenticated=await loadMySession();
+      if(!authenticated){
+        setAuthError("Account credentials were accepted, but the login session could not be verified. Check that cookies are allowed, then sign in again.");
+      }
     }catch(e){setAuthError(e instanceof Error?e.message:"Unable to sign in");}
     finally{setAuthBusy(false);}
   };
@@ -198,7 +208,7 @@ export default function App() {
       <a className="nav-item" href="#paper-desk"><span className="nav-icon">↗</span>Paper Trading</a>
       <a className="nav-item" href="#meme-markets"><span className="nav-icon">◆</span>Meme Coins</a><a className="nav-item" href="#ai-council"><span className="nav-icon">⌁</span>AI Council <span className="status-pill">{councilBusy?"ANALYZING":council?"EVIDENCE READY":"NO DATA"}</span></a><div className="nav-label" style={{ marginTop: 26 }}>Execution</div><div className="agent-row"><span className="agent-avatar">P</span><div className="agent-info"><div className="agent-name">Paper Trading</div><div className="agent-role">Virtual USDT · browser wallet</div></div></div><p className="footer-note">Simulated trades are enabled. Binance account orders remain locked until a protected testnet connection and risk system are configured.</p></aside>
       <main className="content"><div className="page-heading"><div><p className="eyebrow">Public market data · paper trading enabled</p><h1>Trading War Room</h1><p className="subhead">Simulate Spot trades with a locally saved paper wallet. Market quotes retain their exchange-source labels; no real orders are submitted.</p></div><div className="row"><button className="btn secondary" onClick={() => void refresh()}>↻ Refresh</button></div></div>
-        <section className="panel account-access-panel">
+        <section id="account-access" className="panel account-access-panel">
           <div className="panel-head"><div><h2 className="panel-title">APEX personal account</h2>
             <div className="panel-subtitle">Public registration · email and password · private cloud wallet</div></div>
             <span className="status-pill">{!sessionChecked?"CHECKING":user?"SIGNED IN":"GUEST"}</span></div>
