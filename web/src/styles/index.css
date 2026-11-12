@@ -89,3 +89,5 @@ a.nav-item {text-decoration:none;}
 .credential-controls input:focus{outline:2px solid #36cfdf;}
 .credential-controls button{grid-column:1/-1;justify-self:start;}
 @media(max-width:650px){.credential-controls{grid-template-columns:1fr}.credential-controls button{grid-column:1}.account-access-panel a.btn{width:100%;}}
+
+.apex-auth-form{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;max-width:380px;margin:18px 0}.apex-auth-form label{font-size:12px;font-weight:700;color:#b7cadf}.apex-auth-form input{width:100%;box-sizing:border-box;min-height:44px;padding:10px 13px;border:1px solid #3a5673;border-radius:9px;background:#0e1926;color:#eaf7ff}.apex-auth-form input:focus{outline:2px solid #49e3ef}.apex-auth-form button{justify-self:start}

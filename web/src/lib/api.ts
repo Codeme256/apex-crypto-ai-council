@@ -52,6 +52,9 @@ export interface PersonalBinanceStatus {environment:string;connected:boolean;fin
 export const api = {
   health: () => req<Health>("/health"),
   council: (symbol:string,timeframe:string) => req<CouncilReport>(`/council?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`),
+  emailSignup:(email:string,password:string)=>req<{user:CouncilUser}>("/auth/register",{method:"POST",body:JSON.stringify({email,password})}),
+  emailLogin:(email:string,password:string)=>req<{user:CouncilUser}>("/auth/login",{method:"POST",body:JSON.stringify({email,password})}),
+  logout:()=>req<{ok:boolean}>("/auth/logout",{method:"POST",body:"{}"}),
   registerOrLogin:()=>req<{user:CouncilUser;registered:boolean}>("/private/me"),
   privatePaper:()=>req<PrivatePaperState>("/private/paper"),
   privatePaperOrder:(symbol:string,side:"BUY"|"SELL",amount:number)=>req<{wallet:import("./paper-trading").PaperState;exchangeOrder:false}>("/private/paper/orders",{method:"POST",body:JSON.stringify({symbol,side,amount})}),

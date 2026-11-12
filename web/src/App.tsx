@@ -24,6 +24,11 @@ export default function App() {
   const [category,setCategory] = useState<"ALL"|"MEME">("ALL");
   const [paper,setPaper] = useState<PaperState>(()=>initialPaper());
   const [user,setUser] = useState<CouncilUser|null>(null);
+  const [authMode,setAuthMode]=useState<"register"|"login">("register");
+  const [authEmail,setAuthEmail]=useState("");
+  const [authPassword,setAuthPassword]=useState("");
+  const [authBusy,setAuthBusy]=useState(false);
+  const [authError,setAuthError]=useState("");
   const [sessionChecked,setSessionChecked] = useState(false);
   const [paperBusy,setPaperBusy] = useState(false);
   const [testnetKey,setTestnetKey] = useState("");
@@ -59,6 +64,17 @@ export default function App() {
     }finally{setSessionChecked(true);}
   },[]);
   useEffect(()=>{void loadMySession();},[loadMySession]);
+  const submitAuth=async(event:React.FormEvent)=>{
+    event.preventDefault();setAuthBusy(true);setAuthError("");
+    try{
+      if(authMode==="register")await api.emailSignup(authEmail,authPassword);
+      else await api.emailLogin(authEmail,authPassword);
+      setAuthPassword("");await loadMySession();
+    }catch(e){setAuthError(e instanceof Error?e.message:"Unable to sign in");}
+    finally{setAuthBusy(false);}
+  };
+  const logout=async()=>{setAuthBusy(true);try{await api.logout();setUser(null);setPaper(initialPaper());setBinanceStatus(null);setBinanceAccount(null);setAuthPassword("");}
+    catch(e){setAuthError(e instanceof Error?e.message:"Sign out failed");}finally{setAuthBusy(false);}};
   const checkBinance=async()=>{
     if(!user)return;
     setCheckingAccount(true);setAccountMessage("");
@@ -184,19 +200,33 @@ export default function App() {
       <main className="content"><div className="page-heading"><div><p className="eyebrow">Public market data · paper trading enabled</p><h1>Trading War Room</h1><p className="subhead">Simulate Spot trades with a locally saved paper wallet. Market quotes retain their exchange-source labels; no real orders are submitted.</p></div><div className="row"><button className="btn secondary" onClick={() => void refresh()}>↻ Refresh</button></div></div>
         <section className="panel account-access-panel">
           <div className="panel-head"><div><h2 className="panel-title">APEX personal account</h2>
-            <div className="panel-subtitle">Public registration · verified email login · private cloud wallet</div></div>
+            <div className="panel-subtitle">Public registration · email and password · private cloud wallet</div></div>
             <span className="status-pill">{!sessionChecked?"CHECKING":user?"SIGNED IN":"GUEST"}</span></div>
           {user?<div className="signal-detail"><b>{user.email}</b> · Registered member
-            <p className="footer-note">Your Binance Testnet credentials and simulated trades are isolated from other users. To use another account, sign out via Cloudflare Access before signing in again.</p>
-            <a className="btn secondary" href="https://dawn-shadow-4219.cloudflareaccess.com/cdn-cgi/access/logout">Sign out</a>
-          </div>:<div><p className="footer-note">Open the registration link to verify your email with a one-time code. Return here after login; your paper wallet and private Binance connection will be created automatically.</p>
-            <a className="btn" href="/api/private/welcome">Register / Sign in with email</a>
+            <p className="footer-note">Your paper trades and Binance Testnet credentials belong only to this account.</p>
+            <button className="btn secondary" onClick={()=>void logout()} disabled={authBusy}>Sign out</button>
+          </div>:<div>
+            <p className="footer-note">Register with your own Gmail address or any email. No Cloudflare login is required.</p>
+            <form className="apex-auth-form" onSubmit={e=>void submitAuth(e)}>
+              <label htmlFor="account-email">Email address</label>
+              <input id="account-email" type="email" autoComplete="email" value={authEmail} required placeholder="you@gmail.com" onChange={e=>setAuthEmail(e.target.value)}/>
+              <label htmlFor="account-password">Password</label>
+              <input id="account-password" type="password" required minLength={12} maxLength={128}
+                 autoComplete={authMode==="register"?"new-password":"current-password"} value={authPassword}
+                 onChange={e=>setAuthPassword(e.target.value)} placeholder="At least 12 characters"/>
+              <button type="submit" className="btn" disabled={authBusy}>{authBusy?"Please wait…":authMode==="register"?"Create my account":"Sign in"}</button>
+            </form>
+            <button type="button" className="btn secondary" onClick={()=>{setAuthMode(authMode==="register"?"login":"register");setAuthError("");}}>
+              {authMode==="register"?"Already registered? Sign in":"New here? Create account"}
+            </button>
+            {authError&&<div className="error-box" role="alert">{authError}</div>}
+            <p className="footer-note">Email verification and password recovery are planned before public launch.</p>
           </div>}
         </section>
         {error && <div className="error-box" role="alert">Market feed: {error}</div>}
         <section id="paper-desk" className="panel" style={{marginTop:0,marginBottom:16}}>
           <div className="panel-head"><div><h2 className="panel-title">Spot Paper Trading Desk</h2>
-          <div className="panel-subtitle">Virtual 10,000 USDT starting balance · isolated cloud wallet per verified email</div></div>
+          <div className="panel-subtitle">Virtual 10,000 USDT starting balance · isolated cloud wallet per private account</div></div>
           <span className="status-pill">{paper.killSwitch?"PAPER HALTED":"PAPER ACTIVE"}</span></div>
           <div className="paper-stats">
            <Kpi label="Paper cash" value={fmt(paper.cash)+" USDT"} foot="Virtual, not exchange funds"/>
