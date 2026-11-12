@@ -1,6 +1,6 @@
 // Cloudflare Worker API: public accounts, isolated paper portfolios and Binance Spot Testnet.
 // No live-money order placement endpoints exist in this worker.
-interface Env { DB: D1Database; ENCRYPTION_KEY: string; ASSETS?: Fetcher }
+interface Env { DB: D1Database; ENCRYPTION_KEY: string; GOOGLE_CLIENT_ID?: string; GOOGLE_CLIENT_SECRET?: string; ASSETS?: Fetcher }
 const json = (body: unknown, status = 200, headers: Record<string,string> = {}) =>
   new Response(JSON.stringify(body), {status, headers: {"content-type":"application/json; charset=utf-8", "cache-control":"no-store", ...headers}});
 const te = new TextEncoder();
@@ -54,6 +54,29 @@ async function decrypt(env:Env,encrypted:string) {
   const [iv,ct]=encrypted.split(":");
   return new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:fromHex(iv)},await keyFor(env),fromHex(ct)));
 }
+
+const flowCookie=(state:string,seconds:number)=>`apex_oauth=${state}; Path=/api/auth/google; HttpOnly; Secure; SameSite=Lax; Max-Age=${seconds}`;
+const toBase64Url=(buffer:ArrayBuffer|Uint8Array)=>btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/g,"");
+const fromBase64Url=(value:string)=>Uint8Array.from(atob(value.replace(/-/g,"+").replace(/_/g,"/")),c=>c.charCodeAt(0));
+async function verifyGoogleIdToken(token:string,clientId:string,expectedNonce:string){
+ const [head,payload,signature,...extra]=token.split(".");
+ if(!head||!payload||!signature||extra.length)throw Error("Invalid Google identity token");
+ const h=JSON.parse(new TextDecoder().decode(fromBase64Url(head))) as {alg?:string;kid?:string};
+ const p=JSON.parse(new TextDecoder().decode(fromBase64Url(payload))) as {iss?:string;aud?:string|Array<string>;exp?:number;iat?:number;sub?:string;email?:string;email_verified?:boolean;nonce?:string};
+ if(h.alg!=="RS256"||typeof h.kid!=="string"||!["accounts.google.com","https://accounts.google.com"].includes(p.iss||"")||
+    !(typeof p.aud==="string"?p.aud===clientId:Array.isArray(p.aud)&&p.aud.length===1&&p.aud[0]===clientId)||
+    !p.exp||p.exp*1000<=Date.now()||!p.iat||p.iat*1000>Date.now()+60000||
+    p.nonce!==expectedNonce||!p.email_verified||!validEmail(p.email)||!p.sub||p.sub.length>255)throw Error("Google identity verification failed");
+ const res=await fetch("https://www.googleapis.com/oauth2/v3/certs");
+ if(!res.ok)throw Error("Google signing keys unavailable");
+ const jwks=await res.json() as {keys:Array<JsonWebKey&{kid?:string;alg?:string;use?:string}>};
+ const jwk=jwks.keys.find(k=>k.kid===h.kid&&k.kty==="RSA"&&(!k.alg||k.alg==="RS256")&&(!k.use||k.use==="sig"));
+ if(!jwk)throw Error("Google signing key not found");
+ const key=await crypto.subtle.importKey("jwk",jwk,{name:"RSASSA-PKCS1-v1_5",hash:"SHA-256"},false,["verify"]);
+ if(!await crypto.subtle.verify("RSASSA-PKCS1-v1_5",key,fromBase64Url(signature),te.encode(head+"."+payload)))throw Error("Google token signature invalid");
+ return {sub:p.sub,email:p.email.toLowerCase()};
+}
+
 async function binanceAccount(key:string,secret:string){
   const timestamp=Date.now(),params=new URLSearchParams({timestamp:String(timestamp),recvWindow:"5000"});
   const hmac=await crypto.subtle.importKey("raw",te.encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
@@ -88,6 +111,56 @@ export default {
   const ip=request.headers.get("CF-Connecting-IP")||"unknown";
   try{
    if(path==="/api/health"&&method==="GET")return json({status:"ok",mode:"PAPER",liveTrading:false});
+
+   // Users authenticate with THEIR OWN Google identities. Cloudflare is only hosting the app.
+   if(path==="/api/auth/google/start"&&method==="GET"){
+    if(!env.GOOGLE_CLIENT_ID||!env.GOOGLE_CLIENT_SECRET)return fail("Google sign-in has not been configured",503);
+    if(!await checkRate(env.DB,"google-start:"+ip,20,3600000))return fail("Too many sign-in attempts",429);
+    const state=hex(rand(32)),verifier=toBase64Url(rand(32)),nonce=hex(rand(24));
+    const challenge=toBase64Url(await crypto.subtle.digest("SHA-256",te.encode(verifier)));
+    await env.DB.prepare("INSERT INTO oauth_flows(state_hash,verifier,nonce,expires_at) VALUES (?,?,?,?)").bind(await sha(state),verifier,nonce,Date.now()+600000).run();
+    const redirectUri=url.origin+"/api/auth/google/callback";
+    const params=new URLSearchParams({response_type:"code",client_id:env.GOOGLE_CLIENT_ID,redirect_uri:redirectUri,scope:"openid email",state,nonce,code_challenge:challenge,code_challenge_method:"S256",prompt:"select_account"});
+    return new Response(null,{status:302,headers:{"location":"https://accounts.google.com/o/oauth2/v2/auth?"+params.toString(),"set-cookie":flowCookie(state,600),"cache-control":"no-store"}});
+   }
+   if(path==="/api/auth/google/callback"&&method==="GET"){
+    const state=url.searchParams.get("state"),code=url.searchParams.get("code");
+    const fromCookie=request.headers.get("cookie")?.match(/(?:^|; )apex_oauth=([a-f0-9]{64})(?:;|$)/)?.[1];
+    const back=(reason:string)=>new Response(null,{status:302,headers:{"location":"/?auth_error="+encodeURIComponent(reason),"set-cookie":flowCookie("",0),"cache-control":"no-store"}});
+    if(!env.GOOGLE_CLIENT_ID||!env.GOOGLE_CLIENT_SECRET)return back("Google login unavailable");
+    if(!state||!fromCookie||state!==fromCookie||!code)return back("Google login cancelled or expired");
+    const hash=await sha(state);
+    const flow=await env.DB.prepare("SELECT verifier,nonce,expires_at FROM oauth_flows WHERE state_hash=?").bind(hash).first<{verifier:string;nonce:string;expires_at:number}>();
+    if(!flow||flow.expires_at<Date.now())return back("Google login expired");
+    const claimed=await env.DB.prepare("DELETE FROM oauth_flows WHERE state_hash=?").bind(hash).run();
+    if(!claimed.meta.changes)return back("Google login already used");
+    const exchange=await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},body:new URLSearchParams({code,client_id:env.GOOGLE_CLIENT_ID,client_secret:env.GOOGLE_CLIENT_SECRET,redirect_uri:url.origin+"/api/auth/google/callback",grant_type:"authorization_code",code_verifier:flow.verifier})});
+    if(!exchange.ok)return back("Google login could not be completed");
+    const tokens=await exchange.json() as {id_token?:string};
+    if(!tokens.id_token)return back("Google identity token missing");
+    let google:{sub:string;email:string};
+    try{google=await verifyGoogleIdToken(tokens.id_token,env.GOOGLE_CLIENT_ID,flow.nonce)}catch{return back("Google identity validation failed")}
+    let existing=await env.DB.prepare("SELECT user_id FROM google_identities WHERE google_sub=?").bind(google.sub).first<{user_id:string}>();
+    let userId=existing?.user_id;
+    if(!userId){
+      // No automatic merge by email: existing password accounts need an explicit account-linking flow.
+      const duplicate=await env.DB.prepare("SELECT id FROM users WHERE email=?").bind(google.email).first();
+      if(duplicate)return back("Email already registered; sign in using your password");
+      userId=crypto.randomUUID();
+      const randomSalt=hex(rand(16)),impossiblePassword=hex(rand(32));
+      try{
+        await env.DB.batch([
+          env.DB.prepare("INSERT INTO users(id,email,password_hash,password_salt,created_at) VALUES(?,?,?,?,?)").bind(userId,google.email,impossiblePassword,randomSalt,Date.now()),
+          env.DB.prepare("INSERT INTO paper_wallets(user_id,available_usdt,realized_pnl) VALUES(?,10000,0)").bind(userId),
+          env.DB.prepare("INSERT INTO google_identities(google_sub,user_id,created_at) VALUES(?,?,?)").bind(google.sub,userId,Date.now())
+        ]);
+      }catch{return back("Account creation could not be completed")}
+    }
+    const response=new Response(null,{status:302,headers:{"location":"/","cache-control":"no-store"}});
+    response.headers.append("set-cookie",await session(env.DB,userId));
+    response.headers.append("set-cookie",flowCookie("",0));
+    return response;
+   }
    if(path==="/api/auth/register"&&method==="POST"){
     if(!await checkRate(env.DB,"register:"+ip,5,3600000))return fail("Registration rate limit exceeded",429);
     const b=await body(request),email=String(b.email||"").trim().toLowerCase(),password=b.password;
