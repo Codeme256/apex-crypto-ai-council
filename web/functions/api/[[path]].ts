@@ -102,6 +102,30 @@ export async function onRequest({ request, env }: PagesContext): Promise<Respons
   if (route === "health") {
     return json({ service: "apex-market-api", version: "1.1.0", overall: "healthy", modeDefault: "READ_ONLY", timestamp: Date.now(), live: { spotAuthActive: false, futuresAuthActive: false, killSwitch: true, circuitBreaker: false }, capabilities: { publicMarketData: true, portfolio: false, agents: false, paperExecution: false, liveExecution: false } });
   }
+  if(route==="feed-status"){
+    const symbol=(url.searchParams.get("symbol")||"BTCUSDT").toUpperCase();
+    if(!allowed.has(symbol))return json({error:"Unsupported symbol"},400);
+    const krakenPair=KRAKEN_PAIRS[symbol];
+    const coinbaseProduct=symbol.replace(/(USDT|USDC|USD)$/,"-$1");
+    const checks=[
+     {name:"Binance Spot",url:`${BINANCE}/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`},
+     {name:"Coinbase Exchange",url:`${COINBASE}/products/${encodeURIComponent(coinbaseProduct)}/ticker`},
+     ...(krakenPair?[{name:"Kraken Spot",url:`${KRAKEN}/0/public/Ticker?pair=${encodeURIComponent(krakenPair)}`}]:[])
+    ];
+    const sources=await Promise.all(checks.map(async x=>{
+      const started=Date.now();
+      try{
+       const response=await fetch(x.url,{headers:{accept:"application/json"},signal:AbortSignal.timeout(6500)});
+       let available=response.ok;
+       if(available&&x.name==="Kraken Spot"){
+        const data=await response.json() as {error?:unknown[];result?:Record<string,unknown>};
+        available=Array.isArray(data.error)&&data.error.length===0&&Boolean(data.result&&Object.keys(data.result).length);
+       }
+       return {name:x.name,httpStatus:response.status,available,latencyMs:Date.now()-started};
+      }catch(e){return {name:x.name,httpStatus:null,available:false,latencyMs:Date.now()-started,issue:e instanceof Error?e.name:"Network error"};}
+    }));
+    return json({symbol,checkedAt:new Date().toISOString(),sources,note:"Real upstream response checks from Cloudflare Pages; public data only. HTTP 403 usually indicates upstream access restrictions."},200,"public, max-age=30");
+  }
   if (route === "ticker") {
     const requested = url.searchParams.get("symbols")?.split(",").map(s => s.trim().toUpperCase()).filter(Boolean) ?? [...allowed];
     if (!requested.length || requested.length > 20 || requested.some(s => !allowed.has(s))) return json({ error: "Use up to 20 configured market symbols" }, 400);
