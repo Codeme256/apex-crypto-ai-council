@@ -32,6 +32,9 @@ jobs:
       - name: Typecheck Cloudflare Pages council functions
         working-directory: web
         run: npx tsc --noEmit --target ES2022 --lib ES2022,DOM --module ESNext --moduleResolution bundler --skipLibCheck functions/api/council.ts
+      - name: Typecheck new email signup and session endpoints
+        working-directory: web
+        run: npx tsc --noEmit --target ES2022 --lib ES2022,DOM --module ESNext --moduleResolution bundler --skipLibCheck functions/api/auth/\\[\\[path\\]\\].ts
       - name: Typecheck individual user account and Binance endpoints
         working-directory: web
         run: npx tsc --noEmit --target ES2022 --lib ES2022,DOM --module ESNext --moduleResolution bundler --skipLibCheck functions/api/private/\[\[path\]\].ts
