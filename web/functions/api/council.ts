@@ -1,7 +1,7 @@
 import { onRequest as marketApi } from "./[[path]]";
 import { evaluateCouncil } from "../../src/lib/council-analysis";
 type Context={request:Request;env:{MARKET_SYMBOLS?:string}};
-const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"}});
+const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff", "access-control-allow-origin": "https://apex-ai-trade-war-room.pages.dev", "vary": "Origin"}});
 const TF=new Set(["1m","5m","15m","1h","4h"]);
 export async function onRequest({request,env}:Context):Promise<Response>{
  if(request.method!=="GET")return json({error:"GET only"},405);
