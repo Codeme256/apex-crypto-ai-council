@@ -12,6 +12,11 @@ export default function AccountWorkspace({symbol}:{symbol:string}) {
  const [sessionChecked,setSessionChecked]=useState(false);
  const [sessionBusy,setSessionBusy]=useState(false);
  const [sessionError,setSessionError]=useState("");
+ const [authMode,setAuthMode]=useState<"register"|"login">("register");
+ const [authEmail,setAuthEmail]=useState("");
+ const [authPassword,setAuthPassword]=useState("");
+ const [authBusy,setAuthBusy]=useState(false);
+ const [authFeedback,setAuthFeedback]=useState("");
  const [wallet,setWallet]=useState<PaperState|null>(null);
  const [quotes,setQuotes]=useState<Quote[]>([]);
  const [quotesError,setQuotesError]=useState("");
@@ -52,6 +57,33 @@ export default function AccountWorkspace({symbol}:{symbol:string}) {
    if(!/401|sign in|not authenticated/i.test(message))setSessionError(message);
   } finally {setSessionChecked(true);setSessionBusy(false)}
  },[]);
+
+ async function submitAuth(event:React.FormEvent<HTMLFormElement>){
+  event.preventDefault();
+  if(authBusy)return;
+  setAuthBusy(true);setAuthFeedback("");
+  try{
+    const result=authMode==="register"?
+      await api.emailSignup(authEmail.trim().toLowerCase(),authPassword):
+      await api.emailLogin(authEmail.trim().toLowerCase(),authPassword);
+    setUser(result.user);setAuthPassword("");
+    setAuthFeedback(authMode==="register"?"Account created. Loading your private wallet…":"Signed in. Loading your private wallet…");
+    await loadSession();
+    document.getElementById("account")?.scrollIntoView({block:"start",behavior:"smooth"});
+  }catch(e){
+    setAuthFeedback(errorMessage(e));
+  }finally{setAuthBusy(false);}
+ }
+ async function signOut(){
+  if(authBusy)return;
+  setAuthBusy(true);setAuthFeedback("");
+  try{
+    await api.logout();
+    setUser(null);setWallet(null);setTestnetAccount(null);setTestnetStatus(null);setKey("");setSecret("");
+    setAuthFeedback("Signed out successfully.");
+  }catch(e){setAuthFeedback(errorMessage(e));}
+  finally{setAuthBusy(false);}
+ }
 
  const loadQuotes=useCallback(async()=>{
   try {
@@ -132,19 +164,39 @@ export default function AccountWorkspace({symbol}:{symbol:string}) {
  }
  return <>
   <section id="account" className="cc-panel cc-workspace">
-   <div className="cc-panel-head"><div><h2>My APEX Account</h2><p>Existing Cloudflare Access email authentication · isolated D1 account records</p></div>
+   <div className="cc-panel-head"><div><h2>My APEX Account</h2><p>Register with your own email and password · private D1 account and wallet</p></div>
     <span className={"cc-chip "+(user?"cc-good":"cc-warn")}>{sessionBusy?"VERIFYING SESSION":user?"SIGNED IN":"SIGN IN REQUIRED"}</span></div>
    {sessionError&&<div className="cc-error" role="alert">{sessionError}</div>}
    {!sessionChecked?<p className="cc-muted">Checking your secure login…</p>:
-    !user?<div className="cc-user-line">
-      <div><strong>You are viewing public market data</strong><p className="cc-hint">Sign in with your email to access your existing private paper wallet and your own Binance Testnet connection. No new wallet or broker account is required.</p></div>
-      <a className="cc-action-link" href="/api/private/welcome">Register / Sign in with email</a>
+    !user?<div className="cc-auth-content">
+      <strong>{authMode==="register"?"Create your personal APEX account":"Welcome back — sign in"}</strong>
+      <p className="cc-hint">Use your own Gmail, Yahoo, or other email address. No Cloudflare account or Google OAuth setup is required.</p>
+      <form className="cc-auth-form" onSubmit={e=>void submitAuth(e)}>
+        <label htmlFor="cc-auth-email">Email address</label>
+        <input id="cc-auth-email" type="email" required autoComplete="email" placeholder="you@gmail.com"
+          value={authEmail} onChange={e=>setAuthEmail(e.target.value)} disabled={authBusy}/>
+        <label htmlFor="cc-auth-password">Password (minimum 12 characters)</label>
+        <input id="cc-auth-password" type="password" required minLength={12} maxLength={128}
+          placeholder="At least 12 characters"
+          autoComplete={authMode==="register"?"new-password":"current-password"}
+          value={authPassword} onChange={e=>setAuthPassword(e.target.value)} disabled={authBusy}/>
+        <button type="submit" className="cc-auth-submit" disabled={authBusy}>
+          {authBusy?"Checking your account…":authMode==="register"?"Create my account":"Sign in to APEX"}
+        </button>
+      </form>
+      <button type="button" className="cc-auth-switch" disabled={authBusy}
+        onClick={()=>{setAuthMode(authMode==="register"?"login":"register");setAuthFeedback("");}}>
+        {authMode==="register"?"Already registered? Sign in":"New to APEX? Create an account"}
+      </button>
+      {authFeedback&&<div className="cc-notice" role="status" aria-live="polite">{authFeedback}</div>}
+      <p className="cc-hint">Account verification by email and password recovery are not yet available.</p>
     </div>:<div className="cc-user-line">
-      <div><span className="cc-hint">Signed in as</span><strong>{user.email}</strong><p className="cc-hint">Your virtual wallet and credentials are accessible only within this verified account.</p></div>
+      <div><span className="cc-hint">Signed in as</span><strong>{user.email}</strong><p className="cc-hint">Your virtual wallet and credentials are accessible only within this account.</p></div>
       <div className="cc-workspace-actions">
        <button type="button" onClick={()=>void loadSession()} disabled={sessionBusy}>Refresh my account</button>
-       <a className="cc-action-link cc-neutral" href="https://dawn-shadow-4219.cloudflareaccess.com/cdn-cgi/access/logout">Sign out</a>
+       <button type="button" onClick={()=>void signOut()} disabled={authBusy}>{authBusy?"Signing out…":"Sign out"}</button>
       </div>
+      {authFeedback&&<div className="cc-notice" role="status">{authFeedback}</div>}
     </div>}
   </section>
 
