@@ -143,6 +143,45 @@ export default function App() {
       <a className="nav-item" href="#meme-markets"><span className="nav-icon">◆</span>Meme Coins</a><a className="nav-item" href="#ai-council"><span className="nav-icon">⌁</span>AI Council <span className="status-pill">{councilBusy?"ANALYZING":council?"EVIDENCE READY":"NO DATA"}</span></a><div className="nav-label" style={{ marginTop: 26 }}>Execution</div><div className="agent-row"><span className="agent-avatar">P</span><div className="agent-info"><div className="agent-name">Paper Trading</div><div className="agent-role">Virtual USDT · browser wallet</div></div></div><p className="footer-note">Simulated trades are enabled. Binance account orders remain locked until a protected testnet connection and risk system are configured.</p></aside>
       <main className="content"><div className="page-heading"><div><p className="eyebrow">Public market data · paper trading enabled</p><h1>Trading War Room</h1><p className="subhead">Simulate Spot trades with a locally saved paper wallet. Market quotes retain their exchange-source labels; no real orders are submitted.</p></div><div className="row"><button className="btn secondary" onClick={() => void refresh()}>↻ Refresh</button></div></div>
         {error && <div className="error-box" role="alert">Market feed: {error}</div>}
+        <section id="paper-desk" className="panel" style={{marginTop:0,marginBottom:16}}>
+          <div className="panel-head"><div><h2 className="panel-title">Spot Paper Trading Desk</h2>
+          <div className="panel-subtitle">Virtual 10,000 USDT starting balance · saved in this browser only</div></div>
+          <span className="status-pill">{paper.killSwitch?"PAPER HALTED":"PAPER ACTIVE"}</span></div>
+          <div className="paper-stats">
+           <Kpi label="Paper cash" value={fmt(paper.cash)+" USDT"} foot="Virtual, not exchange funds"/>
+           <Kpi label="Estimated equity" value={fmt(equity)+" USDT"} foot="Marks to available public quotes"/>
+           <Kpi label="Today's orders" value={String(todaysPaperTrades.length)+"/6"} foot="UTC day · client-side limit"/>
+           <Kpi label="Open holdings" value={String(Object.keys(paper.positions).length)} foot="Spot long-only"/>
+          </div>
+          <div className="paper-trade-row">
+           <div><label htmlFor="paper-size" className="kpi-label">Order value · USDT</label>
+           <input id="paper-size" type="number" min="5" step="1" value={orderUSDT}
+             onChange={e=>setOrderUSDT(e.target.value)} placeholder="25" /></div>
+           <div className="signal-detail">Market: <b>{symbol}</b>
+             <br/>Quote: <b>{currentQuote?.price==null?"Unavailable":fmt(currentQuote.price)}</b>
+             <br/>Source: <b>{currentQuote?.source??"Waiting for feed"}</b>
+           </div>
+           <button className="btn buy" disabled={paper.killSwitch||!currentQuote} onClick={()=>submitPaper("BUY")}>Simulate BUY</button>
+           <button className="btn sell" disabled={paper.killSwitch||!currentQuote} onClick={()=>submitPaper("SELL")}>Simulate SELL</button>
+          </div>
+          {tradeNotice&&<p className="paper-notice" role="status">{tradeNotice}</p>}
+          <div className="paper-columns">
+            <div><h3 className="panel-title">Paper holdings</h3><div className="table-wrap"><table className="data-table">
+             <thead><tr><th>Symbol</th><th>Qty</th><th>Cost (USDT)</th></tr></thead>
+             <tbody>{Object.entries(paper.positions).length?Object.entries(paper.positions).map(([name,pos])=>
+               <tr key={name}><td>{name}</td><td>{fmt(pos.qty)}</td><td>{fmt(pos.cost)}</td></tr>):
+               <tr><td colSpan={3} className="unknown">No simulated holdings</td></tr>}</tbody>
+            </table></div></div>
+            <div><h3 className="panel-title">Recent paper transactions</h3><div className="table-wrap"><table className="data-table">
+             <thead><tr><th>Side</th><th>Symbol</th><th>USDT</th><th>Time</th></tr></thead>
+             <tbody>{paper.trades.length?paper.trades.slice(0,8).map(t=>
+               <tr key={t.id}><td className={t.side==="BUY"?"positive":"negative"}>{t.side}</td><td>{t.symbol}</td>
+               <td>{fmt(t.gross)}</td><td>{time(t.at)}</td></tr>):
+               <tr><td colSpan={4} className="unknown">No paper orders recorded</td></tr>}</tbody>
+            </table></div></div>
+          </div>
+          <p className="footer-note">Paper prices are indicative exchange data, not executable quotes. Simulated fees are included; slippage, funding, tax and exchange fills are not. Clearing browser data resets this wallet.</p>
+        </section>
         <section className="grid kpi-grid"><Kpi label="Selected market" value={symbol} foot={currentQuote?.source ?? "Exchange source unavailable"} /><Kpi label="Latest close" value={fmt(latest?.close)} foot={latest ? `${interval} candle · ${latest.closed ? "closed" : "forming"}` : "No candle loaded"} /><Kpi label="Latest volume" value={fmt(latest?.volume)} foot={latest ? `Candle time ${new Date(latest.time * 1000).toLocaleString()}` : "Unavailable"} /><Kpi label="Trading mode" value="PAPER" foot="No exchange orders or real funds" /></section>
         <section className="grid main-grid"><div className="grid"><section id="markets" className="panel chart-panel"><div className="panel-head"><div><h2 className="panel-title">Live market chart</h2><div className="panel-subtitle">{feed} · candles from Cloudflare Pages API</div></div><div className="chart-controls">
           <select aria-label="Market group" value={category} onChange={e=>{const next=e.target.value as "ALL"|"MEME";setCategory(next);if(next==="MEME"&&!MEMES.has(symbol))setSymbol("DOGEUSDT");}}>
@@ -201,45 +240,6 @@ export default function App() {
             </div>}
           </>}
           <p className="footer-note">These agents are independent deterministic scanners, not self-learning LLMs. No exchange orders are submitted; no win rate or trading edge is claimed. Values are calculated from source-labelled candles. The skeptic and risk agents veto execution when critical market information is missing.</p>
-        </section>
-        <section id="paper-desk" className="panel" style={{marginTop:16}}>
-          <div className="panel-head"><div><h2 className="panel-title">Spot Paper Trading Desk</h2>
-          <div className="panel-subtitle">Virtual 10,000 USDT starting balance · saved in this browser only</div></div>
-          <span className="status-pill">{paper.killSwitch?"PAPER HALTED":"PAPER ACTIVE"}</span></div>
-          <div className="paper-stats">
-           <Kpi label="Paper cash" value={fmt(paper.cash)+" USDT"} foot="Virtual, not exchange funds"/>
-           <Kpi label="Estimated equity" value={fmt(equity)+" USDT"} foot="Marks to available public quotes"/>
-           <Kpi label="Today's orders" value={String(todaysPaperTrades.length)+"/6"} foot="UTC day · client-side limit"/>
-           <Kpi label="Open holdings" value={String(Object.keys(paper.positions).length)} foot="Spot long-only"/>
-          </div>
-          <div className="paper-trade-row">
-           <div><label htmlFor="paper-size" className="kpi-label">Order value · USDT</label>
-           <input id="paper-size" type="number" min="5" step="1" value={orderUSDT}
-             onChange={e=>setOrderUSDT(e.target.value)} placeholder="25" /></div>
-           <div className="signal-detail">Market: <b>{symbol}</b>
-             <br/>Quote: <b>{currentQuote?.price==null?"Unavailable":fmt(currentQuote.price)}</b>
-             <br/>Source: <b>{currentQuote?.source??"Waiting for feed"}</b>
-           </div>
-           <button className="btn buy" disabled={paper.killSwitch||!currentQuote} onClick={()=>submitPaper("BUY")}>Simulate BUY</button>
-           <button className="btn sell" disabled={paper.killSwitch||!currentQuote} onClick={()=>submitPaper("SELL")}>Simulate SELL</button>
-          </div>
-          {tradeNotice&&<p className="paper-notice" role="status">{tradeNotice}</p>}
-          <div className="paper-columns">
-            <div><h3 className="panel-title">Paper holdings</h3><div className="table-wrap"><table className="data-table">
-             <thead><tr><th>Symbol</th><th>Qty</th><th>Cost (USDT)</th></tr></thead>
-             <tbody>{Object.entries(paper.positions).length?Object.entries(paper.positions).map(([name,pos])=>
-               <tr key={name}><td>{name}</td><td>{fmt(pos.qty)}</td><td>{fmt(pos.cost)}</td></tr>):
-               <tr><td colSpan={3} className="unknown">No simulated holdings</td></tr>}</tbody>
-            </table></div></div>
-            <div><h3 className="panel-title">Recent paper transactions</h3><div className="table-wrap"><table className="data-table">
-             <thead><tr><th>Side</th><th>Symbol</th><th>USDT</th><th>Time</th></tr></thead>
-             <tbody>{paper.trades.length?paper.trades.slice(0,8).map(t=>
-               <tr key={t.id}><td className={t.side==="BUY"?"positive":"negative"}>{t.side}</td><td>{t.symbol}</td>
-               <td>{fmt(t.gross)}</td><td>{time(t.at)}</td></tr>):
-               <tr><td colSpan={4} className="unknown">No paper orders recorded</td></tr>}</tbody>
-            </table></div></div>
-          </div>
-          <p className="footer-note">Paper prices are indicative exchange data, not executable quotes. Simulated fees are included; slippage, funding, tax and exchange fills are not. Clearing browser data resets this wallet.</p>
         </section>
         <section className="panel" style={{marginTop:16}}>
           <div className="panel-head"><div><h2 className="panel-title">Connect Binance Spot Testnet</h2>
