@@ -79,3 +79,13 @@ a.nav-item {text-decoration:none;}
 @media(max-width:1100px){.council-agents{grid-template-columns:repeat(2,minmax(0,1fr))}.council-indicators{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:650px){.council-agents{grid-template-columns:1fr}.council-indicators{grid-template-columns:repeat(2,minmax(0,1fr))}.council-section .panel-head{flex-wrap:wrap}.council-agent>p{min-height:0}}
 @media(prefers-reduced-motion:reduce){.council-agent-busy{animation:none;border-color:#29acba}}
+
+/* Public registration and user-isolated Testnet controls */
+.account-access-panel {border-color:#2d6f79;margin-bottom:14px;}
+.account-access-panel a.btn {display:inline-flex;justify-content:center;align-items:center;text-decoration:none;margin-top:10px;}
+.credential-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px}
+.credential-controls label{font-size:12px;line-height:1.5;color:#acc7d7}
+.credential-controls input{display:block;width:100%;margin-top:7px;background:#080f1b;border:1px solid #375568;color:#e3f5ff;border-radius:8px;padding:12px;min-width:0;}
+.credential-controls input:focus{outline:2px solid #36cfdf;}
+.credential-controls button{grid-column:1/-1;justify-self:start;}
+@media(max-width:650px){.credential-controls{grid-template-columns:1fr}.credential-controls button{grid-column:1}.account-access-panel a.btn{width:100%;}}
