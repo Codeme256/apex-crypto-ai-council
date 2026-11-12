@@ -49,6 +49,15 @@ async function verifiedQuote(req:Request,env:Env,symbol:string):Promise<{price:n
  return {price:quote.price,source:quote.source,timestamp:quote.timestamp};
 }
 export async function onRequest({request,env}:Ctx):Promise<Response>{
+ // Legacy registration URLs must never expose a private JSON route to the browser.
+ // Redirect before session checks; account form and identity checks live on the site.
+ const route=new URL(request.url).pathname.replace(/^\/api\/private\/?/,"").replace(/\/$/,"");
+ if(route==="welcome"&&request.method==="GET"){
+  const destination=new URL("/",request.url);
+  destination.searchParams.set("view","console");
+  destination.hash="account-access";
+  return Response.redirect(destination.toString(),303);
+ }
  // Fail securely if Cloudflare Access/D1 are missing. Do not read global API credentials.
  if(!env.APEX_USERS_DB)
   return respond({error:"User accounts are not fully configured on Cloudflare Pages"},503);
@@ -56,10 +65,8 @@ export async function onRequest({request,env}:Ctx):Promise<Response>{
  if(!who)return respond({error:"Sign in with your personal email account",loginPath:"/"},401);
  if(!["GET","POST","PUT","DELETE"].includes(request.method))return respond({error:"Method not allowed"},405);
  if(request.method!=="GET"&&!checkOrigin(request))return respond({error:"Invalid request origin or content type"},403);
- const route=new URL(request.url).pathname.replace(/^\/api\/private\/?/,"").replace(/\/$/,"");
  try{
   await ensureUser(env.APEX_USERS_DB,who,Date.now());
-  if(route==="welcome"&&request.method==="GET")return Response.redirect(new URL("/",request.url).toString(),302);
   if(route==="me"&&request.method==="GET")return respond({user:{email:who.email,id:who.id},mode:"SPOT_TESTNET_AND_PAPER",registered:true});
   if(route==="paper"&&request.method==="GET"){
    const {wallet,version}=await getWallet(env,who.id);
