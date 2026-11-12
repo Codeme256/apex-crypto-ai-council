@@ -50,10 +50,10 @@ async function verifiedQuote(req:Request,env:Env,symbol:string):Promise<{price:n
 }
 export async function onRequest({request,env}:Ctx):Promise<Response>{
  // Fail securely if Cloudflare Access/D1 are missing. Do not read global API credentials.
- if(!env.APEX_USERS_DB||!env.ACCESS_AUD||!env.ACCESS_TEAM_DOMAIN)
+ if(!env.APEX_USERS_DB)
   return respond({error:"User accounts are not fully configured on Cloudflare Pages"},503);
  const who=await identity(request,env);
- if(!who)return respond({error:"Verified email login required",loginPath:"/api/private/me"},401);
+ if(!who)return respond({error:"Sign in with your personal email account",loginPath:"/"},401);
  if(!["GET","POST","PUT","DELETE"].includes(request.method))return respond({error:"Method not allowed"},405);
  if(request.method!=="GET"&&!checkOrigin(request))return respond({error:"Invalid request origin or content type"},403);
  const route=new URL(request.url).pathname.replace(/^\/api\/private\/?/,"").replace(/\/$/,"");
