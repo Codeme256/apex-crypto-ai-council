@@ -18,36 +18,45 @@ async function providerJson(url: string): Promise<unknown> {
   return response.json();
 }
 async function ticker(symbol: string): Promise<Ticker> {
-  // Coinbase Exchange has public USDT products for BTC/ETH/SOL; BNB may fall back to Binance.
-  const coinbaseProduct = symbol.replace(/(USDT|USDC|USD)$/, "-$1");
-  try {
-    const data = await providerJson(`${COINBASE}/products/${encodeURIComponent(coinbaseProduct)}/ticker`) as { price?: string; time?: string };
-    const price = Number(data.price);
-    if (Number.isFinite(price)) return { symbol, price, ok: true, source: `Coinbase Exchange (${coinbaseProduct})`, timestamp: data.time ? Date.parse(data.time) || Date.now() : Date.now() };
-  } catch { /* Try the documented public-only Binance endpoint. */ }
+  // Binance is the requested authoritative source. Never substitute Coinbase
+  // without making its exchange name explicit in the response.
   try {
     const data = await providerJson(`${BINANCE}/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`) as { price?: string };
     const price = Number(data.price);
-    if (Number.isFinite(price)) return { symbol, price, ok: true, source: "Binance Spot REST", timestamp: Date.now() };
-  } catch { /* Return explicitly unavailable; never synthesize a quote. */ }
+    if (Number.isFinite(price) && price > 0) return { symbol, price, ok: true, source: "Binance Spot REST", timestamp: Date.now() };
+  } catch { /* Binance public feed can be region/WAF blocked at the edge. */ }
+  const product = symbol.replace(/(USDT|USDC|USD)$/, "-$1");
+  try {
+    const data = await providerJson(`${COINBASE}/products/${encodeURIComponent(product)}/ticker`) as { price?: string; time?: string };
+    const price = Number(data.price);
+    const parsedTime = data.time ? Date.parse(data.time) : NaN;
+    if (Number.isFinite(price) && price > 0) return {
+      symbol, price, ok: true, source: `Coinbase Exchange (${product}) - fallback, not Binance`,
+      timestamp: Number.isFinite(parsedTime) ? parsedTime : Date.now(),
+    };
+  } catch { /* A quote must never be invented from another instrument. */ }
   return { symbol, price: null, ok: false, source: "Public feeds unavailable", timestamp: Date.now() };
 }
 async function candlesFor(symbol: string, interval: string, limit: number, now: number): Promise<{ candles: Candle[]; source: string }> {
-  const granularity = INTERVALS.get(interval)!;
-  const coinbaseProduct = symbol.replace(/(USDT|USDC|USD)$/, "-$1");
   try {
-    const rows = await providerJson(`${COINBASE}/products/${encodeURIComponent(coinbaseProduct)}/candles?granularity=${granularity}`) as unknown[][];
-    const candles = rows.map(row => ({ time: Number(row[0]), low: Number(row[1]), high: Number(row[2]), open: Number(row[3]), close: Number(row[4]), volume: Number(row[5]), closed: (Number(row[0]) + granularity) * 1000 <= now }))
-      .filter(c => Number.isFinite(c.time) && [c.open, c.high, c.low, c.close, c.volume].every(Number.isFinite))
-      .sort((a, b) => a.time - b.time)
-      .slice(-limit);
-    if (candles.length) return { candles, source: `Coinbase Exchange (${coinbaseProduct})` };
-  } catch { /* Try Binance below; Coinbase only publishes listed products. */ }
-
-  const rows = await providerJson(`${BINANCE}/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`) as unknown[][];
-  const candles = rows.map(row => ({ time: Math.floor(Number(row[0]) / 1000), open: Number(row[1]), high: Number(row[2]), low: Number(row[3]), close: Number(row[4]), volume: Number(row[5]), closed: Number(row[6]) < now }))
-    .filter(c => Number.isFinite(c.time) && [c.open, c.high, c.low, c.close, c.volume].every(Number.isFinite));
-  return { candles, source: "Binance Spot REST" };
+    const rows = await providerJson(`${BINANCE}/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`) as unknown[][];
+    const candles = rows.map(row => ({
+      time: Math.floor(Number(row[0]) / 1000), open: Number(row[1]), high: Number(row[2]),
+      low: Number(row[3]), close: Number(row[4]), volume: Number(row[5]), closed: Number(row[6]) < now,
+    })).filter(c => Number.isFinite(c.time) && [c.open, c.high, c.low, c.close, c.volume].every(Number.isFinite));
+    if (candles.length) return { candles, source: "Binance Spot REST" };
+  } catch { /* Try separately labelled public exchange candles. */ }
+  const granularity = INTERVALS.get(interval)!;
+  const product = symbol.replace(/(USDT|USDC|USD)$/, "-$1");
+  const rows = await providerJson(`${COINBASE}/products/${encodeURIComponent(product)}/candles?granularity=${granularity}`) as unknown[][];
+  const candles = rows.map(row => ({
+    time: Number(row[0]), low: Number(row[1]), high: Number(row[2]),
+    open: Number(row[3]), close: Number(row[4]), volume: Number(row[5]),
+    closed: (Number(row[0]) + granularity) * 1000 <= now,
+  })).filter(c => Number.isFinite(c.time) && [c.open, c.high, c.low, c.close, c.volume].every(Number.isFinite))
+    .sort((a, b) => a.time - b.time).slice(-Math.min(300, limit));
+  if (!candles.length) throw Error("No verified candles available from either exchange");
+  return { candles, source: `Coinbase Exchange (${product}) - fallback, not Binance` };
 }
 
 export async function onRequest({ request, env }: PagesContext): Promise<Response> {
