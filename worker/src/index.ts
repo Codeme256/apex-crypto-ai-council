@@ -56,7 +56,7 @@ async function decrypt(env:Env,encrypted:string) {
 }
 
 const flowCookie=(state:string,seconds:number)=>`apex_oauth=${state}; Path=/api/auth/google; HttpOnly; Secure; SameSite=Lax; Max-Age=${seconds}`;
-const toBase64Url=(buffer:ArrayBuffer|Uint8Array)=>btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/g,"");
+const toBase64Url=(buffer:ArrayBuffer|Uint8Array)=>btoa(String.fromCharCode(...new Uint8Array(buffer))).split("+").join("-").split("/").join("_").replace(/=+$/g,"");
 const fromBase64Url=(value:string)=>Uint8Array.from(atob(value.replace(/-/g,"+").replace(/_/g,"/")),c=>c.charCodeAt(0));
 async function verifyGoogleIdToken(token:string,clientId:string,expectedNonce:string){
  const [head,payload,signature,...extra]=token.split(".");
