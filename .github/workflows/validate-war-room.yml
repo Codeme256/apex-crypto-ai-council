@@ -5,6 +5,7 @@ on:
       - feat/paper-trading-meme-markets-testnet-connection
       - feat/evidence-council-agents
       - fix/kraken-live-market-fallback-and-council
+      - feat/public-users-isolated-testnet-wallets
   pull_request:
     branches:
       - feat/apex-war-room-completion
@@ -31,3 +32,6 @@ jobs:
       - name: Typecheck Cloudflare Pages council functions
         working-directory: web
         run: npx tsc --noEmit --target ES2022 --lib ES2022,DOM --module ESNext --moduleResolution bundler --skipLibCheck functions/api/council.ts
+      - name: Typecheck individual user account and Binance endpoints
+        working-directory: web
+        run: npx tsc --noEmit --target ES2022 --lib ES2022,DOM --module ESNext --moduleResolution bundler --skipLibCheck functions/api/private/\[\[path\]\].ts
