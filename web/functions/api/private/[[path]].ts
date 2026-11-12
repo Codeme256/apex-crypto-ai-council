@@ -1,4 +1,4 @@
-import {identity,respond,checkOrigin,ensureUser,encrypt,decrypt,cryptoReady,readJson,type Env} from "./security";
+import {identity,respond,checkOrigin,ensureUser,encrypt,decrypt,cryptoReady,readJson,type Env} from "../../_lib/security";
 import {initialPaper,paperOrder,type PaperState} from "../../../src/lib/paper-trading";
 import {onRequest as marketApi} from "../[[path]]";
 type Ctx={request:Request;env:Env};
