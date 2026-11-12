@@ -1,8 +1,6 @@
 name: Smoke test APEX live market feed
 on:
-  push:
-    branches:
-      - feat/apex-war-room-completion
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
