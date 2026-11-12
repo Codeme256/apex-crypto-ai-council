@@ -1,193 +1,95 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createChart } from "lightweight-charts";
-import { api, type AgentReport, type Health, type Portfolio, type ScanResult } from "./lib/api";
-import { AGENTS, agentMeta } from "./lib/agents";
-
-type Ticker = { symbol: string; price: number | null; ok: boolean };
-type Candle = { time: number; open: number; high: number; low: number; close: number };
-type View = "War Room" | "Markets" | "Council" | "Risk & Portfolio" | "Backtest";
-type BacktestResult = Record<string, unknown>;
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createChart, CrosshairMode, type IChartApi, type ISeriesApi, type CandlestickData, type Time } from "lightweight-charts";
+import { api, type Candle, type CandleResponse, type Health } from "./lib/api";
 
 const SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"];
-const INTERVALS = ["5m", "15m", "1h", "4h"];
-const NAV: Array<[string, View]> = [["◈", "War Room"], ["⌁", "Markets"], ["◎", "Council"], ["⛨", "Risk & Portfolio"], ["◷", "Backtest"]];
-const money = (n?: number) => n == null || !Number.isFinite(n) ? "—" : n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 });
-const timeLabel = (n?: number) => n ? new Date(n).toLocaleTimeString() : "—";
-const shortSymbol = (s: string) => s.endsWith("USDT") ? `${s.slice(0, -4)}/USDT` : s;
+const INTERVALS = ["1m", "5m", "15m", "1h", "4h"];
+const fmt = (n?: number | null) => n == null || !Number.isFinite(n) ? "—" : n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+const time = (n?: number) => n ? new Date(n).toLocaleTimeString() : "—";
 
 export default function App() {
+  const host = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
-  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
-  const [tickers, setTickers] = useState<Ticker[]>([]);
+  const [tickers, setTickers] = useState<Array<{ symbol: string; price: number | null; ok: boolean; timestamp?: number }>>([]);
   const [symbol, setSymbol] = useState("BTCUSDT");
-  const [timeframe, setTimeframe] = useState("15m");
-  const [scan, setScan] = useState<ScanResult | null>(null);
-  const [backtest, setBacktest] = useState<BacktestResult | null>(null);
-  const [busy, setBusy] = useState("");
+  const [interval, setInterval] = useState("15m");
+  const [candles, setCandles] = useState<Candle[]>([]);
+  const [feed, setFeed] = useState("Connecting");
   const [error, setError] = useState("");
   const [updated, setUpdated] = useState<number>();
-  const [view, setView] = useState<View>("War Room");
 
   const refresh = useCallback(async () => {
-    const results = await Promise.allSettled([api.health(), api.portfolio(), api.ticker(SYMBOLS)]);
-    const [h, p, t] = results;
-    if (h.status === "fulfilled") setHealth(h.value);
-    if (p.status === "fulfilled") setPortfolio(p.value);
-    if (t.status === "fulfilled") setTickers(t.value.tickers);
-    setError(results.some(r => r.status === "rejected")
-      ? "Backend connection incomplete. Unavailable fields are intentionally left blank."
-      : "");
+    const results = await Promise.allSettled([api.health(), api.ticker(SYMBOLS)]);
+    if (results[0].status === "fulfilled") setHealth(results[0].value);
+    if (results[1].status === "fulfilled") setTickers(results[1].value.tickers);
     setUpdated(Date.now());
+    setFeed(results[0].status === "fulfilled" && results[1].status === "fulfilled" ? "API connected" : "API data unavailable");
   }, []);
 
   useEffect(() => {
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 15_000);
-    return () => window.clearInterval(timer);
+    const id = window.setInterval(() => void refresh(), 15_000);
+    return () => window.clearInterval(id);
   }, [refresh]);
 
-  const runScan = async () => {
-    setBusy("scan"); setError("");
-    try {
-      const result = await api.scan({ symbol, market: "SPOT", timeframe });
-      setScan(result);
-      if (result.portfolio) setPortfolio(result.portfolio);
-    } catch (e) { setError(e instanceof Error ? e.message : "Scan request failed"); }
-    finally { setBusy(""); }
-  };
-
-  const runCouncil = async () => {
-    setBusy("council"); setError("");
-    try { await api.councilTick(); await refresh(); }
-    catch (e) { setError(e instanceof Error ? e.message : "Council tick failed"); }
-    finally { setBusy(""); }
-  };
-
-  const runBacktest = async () => {
-    setBusy("backtest"); setError("");
-    try {
-      const result = await api.backtest(symbol);
-      setBacktest(result && typeof result === "object" ? result as BacktestResult : { result });
-      setView("Backtest");
-    } catch (e) { setError(e instanceof Error ? e.message : "Backtest request failed"); }
-    finally { setBusy(""); }
-  };
-
-  const reports = scan?.reports ?? [];
-  const healthy = ["ok", "healthy"].includes((health?.overall ?? "").toLowerCase());
-  const tickerOk = tickers.filter(t => t.ok).length;
-  const selectedPrice = tickers.find(t => t.symbol === symbol)?.price;
-
-  return <div className="apex-shell">
-    <aside className="apex-sidebar">
-      <div className="apex-brand"><span className="apex-brand-mark">A</span><span className="apex-brand-copy"><strong>APEX WAR ROOM</strong><small>AI Trading Council</small></span></div>
-      <div className="apex-nav-label">Workspace</div>
-      <nav className="apex-nav" aria-label="Dashboard sections">
-        {NAV.map(([icon, name]) => <button key={name} className={view === name ? "active" : ""} onClick={() => setView(name as View)}><span className="nav-icon">{icon}</span><span>{name}</span></button>)}
-      </nav>
-      <div className="apex-sidebar-bottom"><div className="apex-safe"><b>SAFE MODE</b><br />Paper-first dashboard. No order placement is available here.</div></div>
-    </aside>
-
-    <div className="apex-main">
-      <header className="apex-topbar">
-        <div className="apex-top-left"><span className="apex-menu">◈</span><span className="apex-status"><i className={`status-dot ${healthy ? "ok" : "warn"}`} />{health ? healthy ? "API ONLINE" : `API ${health.overall.toUpperCase()}` : "API STATUS UNKNOWN"}</span></div>
-        <div className="apex-top-right"><span className="apex-mode">{portfolio?.mode ?? health?.modeDefault ?? "MODE UNKNOWN"}</span><span className="apex-top-time">Updated {timeLabel(updated)}</span></div>
-      </header>
-
-      <main className="apex-content">
-        <div className="apex-heading"><div><h1>{view}</h1><p>Live project signals from configured APIs. No fabricated agent chat, balance, or performance data.</p></div><div className="apex-controls"><select className="apex-select" aria-label="Selected symbol" value={symbol} onChange={e => setSymbol(e.target.value)}>{SYMBOLS.map(s => <option key={s}>{s}</option>)}</select><button className="apex-button" onClick={() => void refresh()}>↻ Refresh</button></div></div>
-        {error && <div className="apex-alert apex-error" role="alert">{error}</div>}
-
-        {view === "War Room" && <>
-          <PortfolioCards portfolio={portfolio} />
-          <div className="apex-grid apex-layout-main">
-            <section className="apex-card"><div className="apex-card-head"><div><h2>Live market chart</h2><small>Public Binance Spot candles · read-only</small></div><div className="apex-chart-controls">{INTERVALS.map(tf => <button key={tf} className={timeframe === tf ? "selected" : ""} onClick={() => setTimeframe(tf)}>{tf}</button>)}</div></div><CandleChart symbol={symbol} interval={timeframe} /></section>
-            <MarketPanel tickers={tickers} price={selectedPrice} symbol={symbol} />
-          </div>
-          <div className="apex-grid apex-lower-grid"><CouncilPanel reports={reports} onScan={runScan} onTick={runCouncil} busy={busy} scan={scan} symbol={symbol} timeframe={timeframe} onTimeframe={setTimeframe} /><RiskPanel portfolio={portfolio} /></div>
-        </>}
-
-        {view === "Markets" && <div className="apex-grid"><div className="apex-grid apex-kpis"><Kpi label="Ticker feeds" value={`${tickerOk}/${tickers.length || "—"}`} foot="Backend-reported public prices" /><Kpi label="Selected pair" value={shortSymbol(symbol)} foot="Binance Spot public market data" /><Kpi label="Latest price" value={money(selectedPrice ?? undefined)} foot="Unavailable if feed is disconnected" /><Kpi label="Last refresh" value={timeLabel(updated)} foot="Auto-refresh every 15 seconds" /></div><div className="apex-grid apex-layout-main"><section className="apex-card"><div className="apex-card-head"><div><h2>{shortSymbol(symbol)} candles</h2><small>Historical and recent candles fetched from Binance public market endpoint</small></div><div className="apex-chart-controls">{INTERVALS.map(tf => <button key={tf} className={timeframe === tf ? "selected" : ""} onClick={() => setTimeframe(tf)}>{tf}</button>)}</div></div><CandleChart symbol={symbol} interval={timeframe} /></section><MarketPanel tickers={tickers} price={selectedPrice} symbol={symbol} /></div><section className="apex-card"><div className="apex-card-head"><h2>Configured market feeds</h2><small>Live response status</small></div><TickerTable tickers={tickers} /></section></div>}
-
-        {view === "Council" && <div className="apex-grid apex-section-grid"><CouncilPanel reports={reports} onScan={runScan} onTick={runCouncil} busy={busy} scan={scan} symbol={symbol} timeframe={timeframe} onTimeframe={setTimeframe} /><section className="apex-card"><div className="apex-card-head"><h2>Agent activity</h2><small>{reports.length} reports in latest scan</small></div><div className="apex-card-body"><AgentMessages reports={reports} /></div></section></div>}
-
-        {view === "Risk & Portfolio" && <div className="apex-grid"><PortfolioCards portfolio={portfolio} /><div className="apex-grid apex-section-grid"><RiskPanel portfolio={portfolio} /><section className="apex-card"><div className="apex-card-head"><h2>Latest candidate gate</h2><small>From latest actual scan response</small></div><div className="apex-card-body">{scan ? <><p>Candidate: <b>{scan.candidate ? `${scan.candidate.symbol} ${scan.candidate.side}` : "None returned"}</b></p><p>Risk engine: <b className={`apex-badge ${scan.riskAllowed ? "good" : "bad"}`}>{scan.riskAllowed ? "ALLOWED" : "REJECTED / NO CANDIDATE"}</b></p>{scan.riskReasons?.length ? <ul>{scan.riskReasons.map((r, i) => <li key={i}>{r}</li>)}</ul> : null}</> : <div className="apex-empty">Run a real scan to view its risk decision and reasons.</div>}</div></section></div></div>}
-
-        {view === "Backtest" && <div className="apex-grid"><section className="apex-card"><div className="apex-card-head"><div><h2>Strategy validation</h2><small>Backend backtest only · historical outcomes do not guarantee future results</small></div><button className="apex-button primary" disabled={!!busy} onClick={() => void runBacktest()}>{busy === "backtest" ? "Running…" : `Run ${symbol} backtest`}</button></div><div className="apex-card-body">{backtest ? <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", color: "#a9bacd", fontSize: 11, margin: 0 }}>{JSON.stringify(backtest, null, 2)}</pre> : <div className="apex-empty">No backtest result loaded. Metrics remain blank until the backend returns actual evaluation results.</div>}</div></section><section className="apex-card"><div className="apex-card-head"><h2>Validation principles</h2><small>Interpret results carefully</small></div><div className="apex-card-body"><ul><li>Use out-of-sample validation where supported by the backend.</li><li>Include fees, spread, and slippage before interpreting strategy results.</li><li>Do not treat a small sample or past return as evidence of future profitability.</li></ul></div></section></div>}
-
-        <footer className="apex-footer">APEX AI Trade War Room · public market chart + project API data · no live order execution in this interface.</footer>
-      </main>
-    </div>
-  </div>;
-}
-
-function PortfolioCards({ portfolio }: { portfolio: Portfolio | null }) {
-  return <div className="apex-grid apex-kpis"><Kpi label="Account equity" value={money(portfolio?.equity)} foot={portfolio ? `${portfolio.mode} · backend reported` : "Waiting for portfolio API"} /><Kpi label="Available balance" value={money(portfolio?.available)} foot={portfolio ? `As of ${timeLabel(portfolio.timestamp)}` : "Not available"} /><Kpi label="Daily P&L" value={money(portfolio?.dailyPnl)} foot="API-reported portfolio value" tone={portfolio == null ? "" : portfolio.dailyPnl >= 0 ? "good" : "bad"} /><Kpi label="Open positions" value={portfolio ? String(portfolio.openPositions) : "—"} foot={portfolio ? `${portfolio.consecutiveLosses} consecutive losses` : "Not available"} /></div>;
-}
-
-function Kpi({ label, value, foot, tone = "" }: { label: string; value: string; foot: string; tone?: string }) {
-  return <section className="apex-card"><div className="apex-card-body"><div className="apex-kpi-label">{label}</div><div className={`apex-kpi-value ${tone === "good" ? "positive" : tone === "bad" ? "negative" : ""}`}>{value}</div><div className="apex-kpi-foot">{foot}</div></div></section>;
-}
-
-function CandleChart({ symbol, interval }: { symbol: string; interval: string }) {
-  const host = useRef<HTMLDivElement>(null);
-  const [state, setState] = useState("Loading public candle data…");
   useEffect(() => {
     if (!host.current) return;
-    let active = true;
     const chart = createChart(host.current, {
       autoSize: true,
-      height: 350,
-      layout: { background: { color: "#0b121b" }, textColor: "#8392a4" },
-      grid: { vertLines: { color: "#172330" }, horzLines: { color: "#172330" } },
-      rightPriceScale: { borderColor: "#22303e" },
-      timeScale: { borderColor: "#22303e", timeVisible: true },
+      height: 340,
+      layout: { background: { color: "#0b121d" }, textColor: "#98a8bd", fontFamily: "Manrope, sans-serif" },
+      grid: { vertLines: { color: "#172232" }, horzLines: { color: "#172232" } },
+      crosshair: { mode: CrosshairMode.Normal },
+      rightPriceScale: { borderColor: "#233247" },
+      timeScale: { borderColor: "#233247", timeVisible: true, secondsVisible: false },
     });
-    const series = chart.addCandlestickSeries({ upColor: "#36d6c3", downColor: "#fb7185", borderVisible: false, wickUpColor: "#36d6c3", wickDownColor: "#fb7185" });
-    const load = async () => {
-      try {
-        const url = `https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=240`;
-        const response = await fetch(url, { headers: { Accept: "application/json" } });
-        if (!response.ok) throw new Error(`Binance public candles returned HTTP ${response.status}`);
-        const rows = await response.json() as unknown[][];
-        if (!active) return;
-        const candles: Candle[] = rows.map(r => ({ time: Math.floor(Number(r[0]) / 1000), open: Number(r[1]), high: Number(r[2]), low: Number(r[3]), close: Number(r[4]) }));
-        series.setData(candles as never[]);
-        chart.timeScale().fitContent();
-        setState(`Public candle feed · ${candles.length} bars · refreshed ${new Date().toLocaleTimeString()}`);
-      } catch (e) { if (active) setState(e instanceof Error ? e.message : "Candle data unavailable"); }
-    };
-    void load();
-    const timer = window.setInterval(() => void load(), 30_000);
-    const resize = new ResizeObserver(entries => { const width = entries[0]?.contentRect.width; if (width) chart.applyOptions({ width }); });
-    resize.observe(host.current);
-    return () => { active = false; window.clearInterval(timer); resize.disconnect(); chart.remove(); };
+    const series = chart.addCandlestickSeries({ upColor: "#52e0a1", downColor: "#ff7185", borderVisible: false, wickUpColor: "#52e0a1", wickDownColor: "#ff7185" });
+    chartRef.current = chart;
+    seriesRef.current = series;
+    return () => { chart.remove(); chartRef.current = null; seriesRef.current = null; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setError("");
+    setFeed("Loading candles");
+    api.candles(symbol, interval, 300).then((result: CandleResponse) => {
+      if (!active) return;
+      const valid = result.candles.filter(c => [c.open, c.high, c.low, c.close].every(Number.isFinite));
+      setCandles(valid);
+      seriesRef.current?.setData(valid.map(c => ({ time: c.time as Time, open: c.open, high: c.high, low: c.low, close: c.close }) as CandlestickData<Time>[][number]));
+      chartRef.current?.timeScale().fitContent();
+      setFeed(`${result.source} · updated ${time(result.retrievedAt)}`);
+    }).catch(e => {
+      if (!active) return;
+      setCandles([]);
+      seriesRef.current?.setData([]);
+      setFeed("Candle data unavailable");
+      setError(e instanceof Error ? e.message : "Unable to load candle data");
+    });
+    return () => { active = false; };
   }, [symbol, interval]);
-  return <><div ref={host} className="apex-chart-wrap" /><div className="apex-card-body" style={{ paddingTop: 0 }}><small className="apex-muted">{state}</small></div></>;
+
+  const latest = candles.at(-1);
+  const healthy = health?.overall?.toLowerCase() === "healthy" || health?.overall?.toLowerCase() === "ok";
+  const caps = health?.capabilities;
+
+  return <div className="warroom">
+    <header className="topbar"><div className="brand"><span className="brand-mark">A</span><span>APEX <span style={{ color: "#49e3ef" }}>AI</span> TRADE WAR ROOM</span></div><div className="topbar-right"><span className="badge"><i className="live-dot" style={{ background: healthy ? "#52e0a1" : "#ffc66d" }} />{health ? healthy ? "API ONLINE" : health.overall.toUpperCase() : "API UNKNOWN"}</span><span className="mode-badge">{health?.modeDefault ?? "MODE UNKNOWN"}</span><span className="badge hide-mobile">Updated {time(updated)}</span></div></header>
+    <div className="layout"><aside className="sidebar"><div className="nav-label">Workspace</div><div className="nav-item active"><span className="nav-icon">⌂</span>War Room</div><div className="nav-item"><span className="nav-icon">◉</span>Markets</div><div className="nav-item"><span className="nav-icon">⌁</span>Agents <span className="status-pill">{caps?.agents ? "ON" : "NOT CONNECTED"}</span></div><div className="nav-label" style={{ marginTop: 26 }}>Execution</div><div className="agent-row"><span className="agent-avatar">R</span><div className="agent-info"><div className="agent-name">Read-only mode</div><div className="agent-role">No live order access</div></div></div><p className="footer-note">Live trading is not available in this market-data-only phase.</p></aside>
+      <main className="content"><div className="page-heading"><div><p className="eyebrow">Market data · read-only connection</p><h1>Trading War Room</h1><p className="subhead">Verified public Binance Spot candles and tickers. Data that is not connected is shown as unavailable.</p></div><div className="row"><button className="btn secondary" onClick={() => void refresh()}>↻ Refresh</button></div></div>
+        {error && <div className="error-box" role="alert">Market feed: {error}</div>}
+        <section className="grid kpi-grid"><Kpi label="Selected market" value={symbol} foot="Binance Spot public market data" /><Kpi label="Latest close" value={fmt(latest?.close)} foot={latest ? `${interval} candle · ${latest.closed ? "closed" : "forming"}` : "No candle loaded"} /><Kpi label="Latest volume" value={fmt(latest?.volume)} foot={latest ? `Candle time ${new Date(latest.time * 1000).toLocaleString()}` : "Unavailable"} /><Kpi label="Trading mode" value="READ ONLY" foot="Order submission disabled" /></section>
+        <section className="grid main-grid"><div className="grid"><section className="panel chart-panel"><div className="panel-head"><div><h2 className="panel-title">Live market chart</h2><div className="panel-subtitle">{feed} · candles from public market-data API</div></div><div className="chart-controls"><select aria-label="Trading pair" value={symbol} onChange={e => setSymbol(e.target.value)}>{SYMBOLS.map(s => <option key={s}>{s}</option>)}</select><select aria-label="Candle interval" value={interval} onChange={e => setInterval(e.target.value)}>{INTERVALS.map(x => <option key={x}>{x}</option>)}</select></div></div><div ref={host} className="chart-host" /><div className="chart-note">Historical candles fetched from the backend. The chart does not imply a signal or recommendation.</div></section>
+          <section className="panel"><div className="panel-head"><div><h2 className="panel-title">Market scanner</h2><div className="panel-subtitle">Public ticker snapshots</div></div><span className="status-pill">{tickers.length ? `${tickers.filter(t => t.ok).length}/${tickers.length} AVAILABLE` : "NO FEED"}</span></div><div className="table-wrap"><table className="data-table"><thead><tr><th>Market</th><th>Last price</th><th>Status</th><th>Source time</th></tr></thead><tbody>{tickers.length ? tickers.map(t => <tr key={t.symbol}><td><strong>{t.symbol}</strong></td><td>{t.ok ? fmt(t.price) : "—"}</td><td className={t.ok ? "positive" : "negative"}>{t.ok ? "Connected" : "Unavailable"}</td><td>{time(t.timestamp)}</td></tr>) : <tr><td colSpan={4} className="unknown">Waiting for ticker API response.</td></tr>}</tbody></table></div></section></div>
+          <div className="grid" style={{ alignContent: "start" }}><section className="panel"><div className="panel-head"><div><h2 className="panel-title">System capabilities</h2><div className="panel-subtitle">Backend-reported status only</div></div></div><Capability name="Public market data" enabled={caps?.publicMarketData} /><Capability name="AI agents" enabled={caps?.agents} /><Capability name="Portfolio/account connection" enabled={caps?.portfolio} /><Capability name="Paper execution" enabled={caps?.paperExecution} /><Capability name="Live execution" enabled={caps?.liveExecution} /><p className="footer-note">Capabilities not yet implemented by the connected API are not represented as active features.</p></section>
+            <section className="panel"><div className="panel-head"><div><h2 className="panel-title">Signal room</h2><div className="panel-subtitle">No fabricated agent messages</div></div></div><div className="empty">{caps?.agents ? "Agent reporting is configured; no scan report has been loaded." : "Agent services are not connected to this read-only API. No signal or AI debate is being generated."}</div></section>
+            <section className="panel"><div className="panel-head"><div><h2 className="panel-title">Risk & execution</h2><div className="panel-subtitle">Trading actions unavailable</div></div></div><div className="signal-detail">Default mode <b>{health?.modeDefault ?? "Unknown"}</b><br />Kill switch <b className={health?.live.killSwitch ? "negative" : "unknown"}>{health ? health.live.killSwitch ? "ACTIVE" : "Clear" : "Unknown"}</b><br />Account equity <b>Unavailable</b><br />Paper fills <b>Unavailable</b></div><p className="footer-note">No account credentials are connected. This dashboard cannot place orders.</p></section></div></section>
+        <p className="footer-note">Market prices can change rapidly. Public feed availability is not guaranteed. Informational display only, not investment advice.</p>
+      </main></div></div>;
 }
 
-function MarketPanel({ tickers, price, symbol }: { tickers: Ticker[]; price?: number | null; symbol: string }) {
-  return <section className="apex-card"><div className="apex-card-head"><div><h2>Market scanner</h2><small>Configured public ticker snapshots</small></div><span className="apex-tag">{tickers.filter(t => t.ok).length}/{tickers.length || 0} feeds</span></div><div className="apex-card-body"><div className="apex-kpi-label">Selected · {shortSymbol(symbol)}</div><div className="apex-kpi-value">{money(price ?? undefined)}</div><TickerTable tickers={tickers} compact /></div></section>;
-}
-
-function TickerTable({ tickers, compact = false }: { tickers: Ticker[]; compact?: boolean }) {
-  return <div className="apex-table-wrap"><table className="apex-table"><thead><tr><th>Pair</th><th>Last price</th><th>Status</th></tr></thead><tbody>{tickers.length ? tickers.map(t => <tr key={t.symbol}><td>{shortSymbol(t.symbol)}</td><td>{money(t.price ?? undefined)}</td><td><span className={`apex-badge ${t.ok ? "good" : "bad"}`}>{t.ok ? "LIVE" : "UNKNOWN"}</span></td></tr>) : <tr><td colSpan={3}>{compact ? "No ticker data available" : "No feed response from the API"}</td></tr>}</tbody></table></div>;
-}
-
-function CouncilPanel({ reports, onScan, onTick, busy, scan, symbol, timeframe, onTimeframe }: { reports: AgentReport[]; onScan: () => void; onTick: () => void; busy: string; scan: ScanResult | null; symbol: string; timeframe: string; onTimeframe: (v: string) => void }) {
-  const reportMap = useMemo(() => new Map(reports.map(r => [r.agent, r])), [reports]);
-  return <section className="apex-card"><div className="apex-card-head"><div><h2>AI War Room</h2><small>Actual reports returned by the latest scan API call</small></div><span className="apex-tag">{scan ? scan.decision?.decision ?? "ANALYZED" : "NO SCAN"}</span></div><div className="apex-card-body"><div className="apex-controls" style={{ marginBottom: 14 }}><select className="apex-select" aria-label="Analysis timeframe" value={timeframe} onChange={e => onTimeframe(e.target.value)}>{INTERVALS.map(tf => <option key={tf}>{tf}</option>)}</select><button className="apex-button primary" disabled={!!busy} onClick={onScan}>{busy === "scan" ? "Scanning…" : `Scan ${symbol}`}</button><button className="apex-button" disabled={!!busy} onClick={onTick}>{busy === "council" ? "Ticking…" : "Council tick"}</button></div>{scan?.candidate ? <div className="apex-alert">{scan.candidate.symbol} · {scan.candidate.side} · {scan.candidate.status}<br />Entry {scan.candidate.entry} · Stop {scan.candidate.stopLoss} · Target {scan.candidate.takeProfit} · R:R {Number(scan.candidate.rewardRisk).toFixed(2)}<br />Risk gate: <b>{scan.riskAllowed ? "Allowed by returned checks" : "Rejected"}</b>{scan.riskReasons?.length ? ` — ${scan.riskReasons.join("; ")}` : ""}</div> : scan ? <div className="apex-empty">The scan returned no candidate. No setup is being presented as active.</div> : null}{scan?.decision && <div className="apex-alert">Chief: <b>{scan.decision.decision}</b> — {scan.decision.rationale}</div>}<div className="apex-agent-list">{AGENTS.map(meta => <AgentCard key={meta.id} meta={meta} report={reportMap.get(meta.id)} />)}</div></div></section>;
-}
-
-function AgentCard({ meta, report }: { meta: (typeof AGENTS)[number]; report?: AgentReport }) {
-  return <article className="apex-agent"><span className="apex-avatar">{meta.initial}</span><div><strong>{meta.name} <span className="apex-muted">· {meta.role}</span></strong><p>{report?.summary ?? "No report from this agent in the latest scan."}{report?.objections?.length ? ` Objections: ${report.objections.join("; ")}` : ""}</p></div><span className={`apex-badge ${report?.advisoryVeto ? "warn" : report?.ok === false ? "bad" : report ? "good" : ""}`}>{report?.advisoryVeto ? "VETO" : report?.ok === false ? "ERROR" : report ? "REPORTED" : "AWAITING"}</span></article>;
-}
-
-function AgentMessages({ reports }: { reports: AgentReport[] }) {
-  if (!reports.length) return <div className="apex-empty">No agent messages returned yet. Run a scan to show actual agent outputs here.</div>;
-  return <div className="apex-agent-list">{reports.map((r, i) => { const meta = agentMeta(r.agent); return <article className="apex-agent" key={`${r.agent}-${i}`}><span className="apex-avatar">{meta.initial}</span><div><strong>{meta.name} {r.confidence == null ? "" : `· ${r.confidence}%`}</strong><p>{r.summary}{r.objections?.length ? ` Objections: ${r.objections.join("; ")}` : ""}</p></div><span className={`apex-badge ${r.advisoryVeto ? "warn" : ""}`}>{r.latencyMs == null ? "REPORT" : `${r.latencyMs}ms`}</span></article>; })}</div>;
-}
-
-function RiskPanel({ portfolio }: { portfolio: Portfolio | null }) {
-  return <section className="apex-card"><div className="apex-card-head"><div><h2>Risk & execution guardrails</h2><small>Read-only portfolio state from backend</small></div><span className="apex-tag">NO ORDER CONTROL</span></div><div className="apex-card-body"><div className="apex-live-list"><div className="apex-live-row"><span className="apex-muted">Mode</span><span className="apex-symbol">{portfolio?.mode ?? "Unknown"}</span><span className="apex-badge">API</span></div><div className="apex-live-row"><span className="apex-muted">Circuit</span><span className="apex-symbol">{portfolio ? portfolio.circuitBreakerActive ? "Active" : "Clear" : "Unknown"}</span><span className={`apex-badge ${portfolio?.circuitBreakerActive ? "bad" : portfolio ? "good" : ""}`}>{portfolio ? portfolio.circuitBreakerActive ? "LOCKED" : "CLEAR" : "UNKNOWN"}</span></div><div className="apex-live-row"><span className="apex-muted">Kill switch</span><span className="apex-symbol">{portfolio ? portfolio.killSwitchActive ? "Active" : "Clear" : "Unknown"}</span><span className={`apex-badge ${portfolio?.killSwitchActive ? "bad" : portfolio ? "good" : ""}`}>{portfolio ? portfolio.killSwitchActive ? "ACTIVE" : "CLEAR" : "UNKNOWN"}</span></div><div className="apex-live-row"><span className="apex-muted">Weekly P&amp;L</span><span className="apex-symbol">{money(portfolio?.weeklyPnl)}</span><span className="apex-badge">REPORTED</span></div></div><div className="apex-footer">The dashboard cannot authorize live orders. Risk checks remain server-side.</div></div></section>;
-}
+function Kpi({ label, value, foot }: { label: string; value: string; foot: string }) { return <div className="panel"><div className="kpi-label">{label}</div><div className="kpi-value">{value}</div><div className="kpi-foot">{foot}</div></div>; }
+function Capability({ name, enabled }: { name: string; enabled?: boolean }) { return <div className="agent-row"><span className="agent-avatar" style={{ color: enabled ? "#52e0a1" : "#ffc66d" }}>{enabled ? "✓" : "—"}</span><div className="agent-info"><div className="agent-name">{name}</div></div><span className="status-pill">{enabled === undefined ? "UNKNOWN" : enabled ? "AVAILABLE" : "NOT CONNECTED"}</span></div>; }
