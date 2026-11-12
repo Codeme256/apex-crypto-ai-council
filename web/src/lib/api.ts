@@ -36,8 +36,13 @@ export interface ScanResult {
 export interface Candle { time: number; open: number; high: number; low: number; close: number; volume: number; closed: boolean }
 export interface CandleResponse { symbol: string; interval: string; source: string; retrievedAt: number; candles: Candle[] }
 
+export interface BinanceConnectionStatus {environment:string;credentialsConfigured:boolean;accessProtectionConfigured:boolean;ordersEnabled:boolean;note:string}
+export interface BinanceTestnetAccount {environment:string;canTrade:boolean;balances:Array<{asset:string;free:string;locked:string}>;updatedAt:number;liveFunds:boolean}
 export const api = {
   health: () => req<Health>("/health"),
+  binanceStatus: () => req<BinanceConnectionStatus>("/binance/status"),
+  binanceAccount: () => req<BinanceTestnetAccount>("/binance/account"),
+  binanceOrderCheck: (symbol:string,quoteOrderQty:number)=>req<{accepted:boolean;orderSubmitted:boolean}>("/binance/order-check",{method:"POST",body:JSON.stringify({symbol,quoteOrderQty})}),
   portfolio: () => req<Portfolio>("/portfolio"),
   scan: (body: { symbol: string; market?: string; timeframe?: string }) => req<ScanResult>("/scan", { method: "POST", body: JSON.stringify(body) }),
   councilTick: () => req<unknown>("/council/tick", { method: "POST", body: "{}" }),
