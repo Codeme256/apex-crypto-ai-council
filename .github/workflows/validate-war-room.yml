@@ -4,6 +4,7 @@ on:
     branches:
       - feat/paper-trading-meme-markets-testnet-connection
       - feat/evidence-council-agents
+      - fix/kraken-live-market-fallback-and-council
   pull_request:
     branches:
       - feat/apex-war-room-completion
@@ -22,7 +23,7 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Test paper trading risk controls
         working-directory: web
-        run: npx vitest run src/lib/paper-trading.test.ts src/lib/council-analysis.test.ts
+        run: npx vitest run src/lib/paper-trading.test.ts src/lib/council-analysis.test.ts functions/api/market-fallback.test.ts
       - name: Typecheck and compile Cloudflare Pages dashboard
         working-directory: web
         run: npm run build
