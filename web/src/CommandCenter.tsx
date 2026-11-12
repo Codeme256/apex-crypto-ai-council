@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createChart, CrosshairMode, type IChartApi, type ISeriesApi, type CandlestickData, type Time } from "lightweight-charts";
 import { api, type CandleResponse, type Candle, type CouncilReport, type Health } from "./lib/api";
 import "./styles/command-center.css";
+import AccountWorkspace from "./AccountWorkspace";
 
 const PAIRS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "DOGEUSDT", "SHIBUSDT", "PEPEUSDT", "BONKUSDT", "FLOKIUSDT"] as const;
 const PERIODS = ["1m", "5m", "15m", "1h", "4h"] as const;
@@ -134,7 +135,7 @@ export default function CommandCenter() {
       <div className="cc-top-tags">
         <span className={"cc-chip "+(feedVerified?"cc-good":"cc-warn")}><i className="cc-dot"/>{feedVerified?"VERIFIED MARKET":"FEED UNAVAILABLE"}</span>
         <span className="cc-chip cc-blue">PAPER / ADVISORY</span>
-        <a className="cc-top-link" href="/?view=console">My account &amp; trading desk ↗</a>
+        <a className="cc-top-link" href="#account">My account &amp; paper desk ↗</a>
       </div>
     </header>
     <div className="cc-shell">
@@ -146,8 +147,10 @@ export default function CommandCenter() {
         <a className="cc-menu" href="#evidence">▤ <span>Agent Reports</span></a>
         <a className="cc-menu" href="#risk">⛨ <span>Risk Control</span></a>
         <p className="cc-menu-label">My workspace</p>
-        <a className="cc-menu" href="/?view=console">⇄ <span>Paper Trading</span></a>
-        <a className="cc-menu" href="/?view=console">⌘ <span>Binance Testnet</span></a>
+        <a className="cc-menu" href="#account">◫ <span>My Account</span></a>
+        <a className="cc-menu" href="#paper-desk">⇄ <span>Paper Trading</span></a>
+        <a className="cc-menu" href="#trade-history">▣ <span>Trade History</span></a>
+        <a className="cc-menu" href="#binance-testnet">⌘ <span>Binance Testnet</span></a>
         <a className="cc-menu" href="/api/private/welcome">⇥ <span>Email Sign In</span></a>
         <p className="cc-sidebar-note">Connected to this site's existing Crypto Council API. Live-money order execution is disabled.</p>
       </aside>
@@ -211,11 +214,12 @@ export default function CommandCenter() {
           <div className="cc-risk-metrics"><div><span>Decision</span><strong>{council?.verdict??"WAIT"}</strong></div>
             <div><span>Trade permission</span><strong className="cc-amber">BLOCKED</strong></div>
             <div><span>Account balance</span><strong>PRIVATE</strong></div>
-            <div><span>Paper wallet</span><a href="/?view=console">Open my trading desk ↗</a></div></div>
+            <div><span>Paper wallet</span><a href="#paper-desk">Manage my paper wallet ↓</a></div></div>
           <p className="cc-hint">Risk engine reports no execution authorization. Paper balances and orders are available only within your verified personal workspace.</p>
           {council?.blockers?.length?<div className="cc-blockers"><strong>Council risk warnings</strong><ul>{council.blockers.map((b,i)=><li key={i}>{b}</li>)}</ul></div>:null}
         </section>
-        <footer className="cc-footer">APEX Crypto AI Council · market evidence, not financial advice · <a href="/?view=console">Open original account console</a></footer>
+        <AccountWorkspace symbol={symbol}/>
+        <footer className="cc-footer">One APEX AI Council dashboard · verified market evidence · individual paper wallets · no live-money execution</footer>
       </main>
     </div>
   </div>;
