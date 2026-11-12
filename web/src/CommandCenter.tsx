@@ -189,7 +189,7 @@ export default function CommandCenter() {
         </section>
         <div className="cc-stat-grid">
           <article className="cc-stat"><span>Selected market</span><strong>{symbol.replace("USDT","/USDT")}</strong><small>{source||"Provider unavailable"}</small></article>
-          <article className="cc-stat"><span>Current exchange quote</span><strong>{council?.quote&&Date.now()-council.quote.timestamp<90000?format(council.quote.price):"—"}</strong><small>{council?.quote?council.quote.source+" · "+clock(council.quote.timestamp):"Verified quote unavailable"} · last candle {format(last?.close)}</small></article>
+          <article className="cc-stat"><span>Latest source quote</span><strong>{format(council?.quote?.price)}</strong><small>{council?.quote?(Date.now()-council.quote.timestamp>90000?"STALE · ":"")+council.quote.source+" · "+clock(council.quote.timestamp):"Quote unavailable"} · last candle {format(last?.close)}</small></article>
           <article className="cc-stat"><span>Council verdict</span><strong className={council?.verdict==="WATCH"?"cc-lime":"cc-amber"}>{council?.verdict??"UNAVAILABLE"}</strong><small>{council?.bias??"No verified assessment"} · no trades</small></article>
           <article className="cc-stat"><span>API status</span><strong>{health?.overall??"UNAVAILABLE"}</strong><small>{health?.modeDefault??"NO DATA"} · last update {clock(marketAt)}</small></article>
         </div>
