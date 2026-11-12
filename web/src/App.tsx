@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createChart, CrosshairMode, type IChartApi, type ISeriesApi, type CandlestickData, type Time } from "lightweight-charts";
-import { api, type Candle, type CandleResponse, type Health, type BinanceConnectionStatus, type BinanceTestnetAccount, type CouncilReport } from "./lib/api";
-import { TRADABLE, paperOrder, paperEquity, loadPaper, storePaper, type PaperState } from "./lib/paper-trading";
+import { api, type Candle, type CandleResponse, type Health, type PersonalBinanceStatus, type BinanceTestnetAccount, type CouncilReport, type CouncilUser } from "./lib/api";
+import { TRADABLE, paperEquity, initialPaper, type PaperState } from "./lib/paper-trading";
 
 const SYMBOLS = [...TRADABLE];
 const MEMES = new Set(["DOGEUSDT","SHIBUSDT","PEPEUSDT","BONKUSDT","FLOKIUSDT"]);
@@ -22,10 +22,16 @@ export default function App() {
   const [error, setError] = useState("");
   const [updated, setUpdated] = useState<number>();
   const [category,setCategory] = useState<"ALL"|"MEME">("ALL");
-  const [paper,setPaper] = useState<PaperState>(()=>loadPaper());
+  const [paper,setPaper] = useState<PaperState>(()=>initialPaper());
+  const [user,setUser] = useState<CouncilUser|null>(null);
+  const [sessionChecked,setSessionChecked] = useState(false);
+  const [paperBusy,setPaperBusy] = useState(false);
+  const [testnetKey,setTestnetKey] = useState("");
+  const [testnetSecret,setTestnetSecret] = useState("");
+  const [connectingTestnet,setConnectingTestnet] = useState(false);
   const [orderUSDT,setOrderUSDT] = useState("25");
   const [tradeNotice,setTradeNotice] = useState("");
-  const [binanceStatus,setBinanceStatus] = useState<BinanceConnectionStatus|null>(null);
+  const [binanceStatus,setBinanceStatus] = useState<PersonalBinanceStatus|null>(null);
   const [binanceAccount,setBinanceAccount] = useState<BinanceTestnetAccount|null>(null);
   const [accountMessage,setAccountMessage] = useState("");
   const [checkingAccount,setCheckingAccount] = useState(false);
@@ -42,35 +48,69 @@ export default function App() {
     setFeed(results[0].status === "fulfilled" && results[1].status === "fulfilled" && results[1].value.tickers.some(t => t.ok) ? "Verified public quote available" : "Live quotes unavailable");
   }, []);
 
-  useEffect(()=>{storePaper(paper);},[paper]);
-  useEffect(()=>{
-    void api.binanceStatus().then(setBinanceStatus).catch(()=>setBinanceStatus(null));
+  const loadMySession=useCallback(async()=>{
+    try{
+      const session=await api.registerOrLogin();
+      setUser(session.user);
+      const [wallet,connection]=await Promise.all([api.privatePaper(),api.binanceStatus()]);
+      setPaper(wallet.wallet);setBinanceStatus(connection);
+    }catch{
+      setUser(null);setBinanceStatus(null);setPaper(initialPaper());
+    }finally{setSessionChecked(true);}
   },[]);
+  useEffect(()=>{void loadMySession();},[loadMySession]);
   const checkBinance=async()=>{
+    if(!user)return;
     setCheckingAccount(true);setAccountMessage("");
     try{
       const account=await api.binanceAccount();
       setBinanceAccount(account);
-      setAccountMessage("Binance Spot TESTNET account authenticated. This does not enable trading orders.");
+      setAccountMessage("Your Binance Spot TESTNET account authenticated. Real trading remains disabled.");
     }catch(e){
       setBinanceAccount(null);
       setAccountMessage(e instanceof Error?e.message:"Testnet connection unavailable");
     }finally{setCheckingAccount(false);}
   };
+  const connectTestnet=async()=>{
+    if(!user)return;
+    setConnectingTestnet(true);setAccountMessage("");
+    try{
+      await api.saveTestnetCredentials(testnetKey,testnetSecret);
+      setTestnetKey("");setTestnetSecret("");
+      setBinanceStatus(await api.binanceStatus());
+      await checkBinance();
+    }catch(e){setAccountMessage(e instanceof Error?e.message:"Unable to connect Testnet");}
+    finally{setConnectingTestnet(false);}
+  };
+  const removeTestnet=async()=>{
+    if(!user)return;
+    try{
+      await api.disconnectTestnet();
+      setBinanceStatus(await api.binanceStatus());
+      setBinanceAccount(null);setTestnetKey("");setTestnetSecret("");
+      setAccountMessage("Your encrypted Testnet credentials were disconnected from this account.");
+    }catch(e){setAccountMessage(e instanceof Error?e.message:"Disconnect failed");}
+  };
   const prices=Object.fromEntries(tickers.filter(t=>t.ok&&t.price!==null).map(t=>[t.symbol,t.price!]));
   const equity=paperEquity(paper,prices);
   const currentQuote=tickers.find(t=>t.symbol===symbol&&t.ok&&t.price!==null);
   const todaysPaperTrades=paper.trades.filter(t=>new Date(t.at).toISOString().slice(0,10)===new Date().toISOString().slice(0,10));
-  const submitPaper=(side:"BUY"|"SELL")=>{
-    setTradeNotice("");
+  const submitPaper=async(side:"BUY"|"SELL")=>{
+    if(!user)return;
+    setPaperBusy(true);setTradeNotice("");
     try{
-      if(!currentQuote||currentQuote.price===null||!currentQuote.timestamp||!currentQuote.source)throw Error("Wait for an available market quote");
-      const next=paperOrder(paper,symbol,side,Number(orderUSDT),{
-       price:currentQuote.price,timestamp:currentQuote.timestamp,source:currentQuote.source,
-      },prices);
-      setPaper(next);storePaper(next);
-      setTradeNotice("SIMULATED "+side+" saved locally. No Binance order was placed.");
+      const data=await api.privatePaperOrder(symbol,side,Number(orderUSDT));
+      setPaper(data.wallet);
+      setTradeNotice("SIMULATED "+side+" saved in your private cloud wallet. No Binance order was placed.");
     }catch(e){setTradeNotice(e instanceof Error?e.message:"Order rejected");}
+    finally{setPaperBusy(false);}
+  };
+  const updatePaperKill=async()=>{
+    if(!user)return;
+    setPaperBusy(true);setTradeNotice("");
+    try{const data=await api.privatePaperKill(!paper.killSwitch);setPaper(data.wallet);}
+    catch(e){setTradeNotice(e instanceof Error?e.message:"Unable to update paper kill switch");}
+    finally{setPaperBusy(false);}
   };
   const runCouncil = useCallback(async()=>{
     setCouncilBusy(true);setCouncilError("");
@@ -142,15 +182,26 @@ export default function App() {
       <a className="nav-item" href="#paper-desk"><span className="nav-icon">↗</span>Paper Trading</a>
       <a className="nav-item" href="#meme-markets"><span className="nav-icon">◆</span>Meme Coins</a><a className="nav-item" href="#ai-council"><span className="nav-icon">⌁</span>AI Council <span className="status-pill">{councilBusy?"ANALYZING":council?"EVIDENCE READY":"NO DATA"}</span></a><div className="nav-label" style={{ marginTop: 26 }}>Execution</div><div className="agent-row"><span className="agent-avatar">P</span><div className="agent-info"><div className="agent-name">Paper Trading</div><div className="agent-role">Virtual USDT · browser wallet</div></div></div><p className="footer-note">Simulated trades are enabled. Binance account orders remain locked until a protected testnet connection and risk system are configured.</p></aside>
       <main className="content"><div className="page-heading"><div><p className="eyebrow">Public market data · paper trading enabled</p><h1>Trading War Room</h1><p className="subhead">Simulate Spot trades with a locally saved paper wallet. Market quotes retain their exchange-source labels; no real orders are submitted.</p></div><div className="row"><button className="btn secondary" onClick={() => void refresh()}>↻ Refresh</button></div></div>
+        <section className="panel account-access-panel">
+          <div className="panel-head"><div><h2 className="panel-title">APEX personal account</h2>
+            <div className="panel-subtitle">Public registration · verified email login · private cloud wallet</div></div>
+            <span className="status-pill">{!sessionChecked?"CHECKING":user?"SIGNED IN":"GUEST"}</span></div>
+          {user?<div className="signal-detail"><b>{user.email}</b> · Registered member
+            <p className="footer-note">Your Binance Testnet credentials and simulated trades are isolated from other users. To use another account, sign out via Cloudflare Access before signing in again.</p>
+            <a className="btn secondary" href="https://dawn-shadow-4219.cloudflareaccess.com/cdn-cgi/access/logout">Sign out</a>
+          </div>:<div><p className="footer-note">Open the registration link to verify your email with a one-time code. Return here after login; your paper wallet and private Binance connection will be created automatically.</p>
+            <a className="btn" href="/api/private/welcome">Register / Sign in with email</a>
+          </div>}
+        </section>
         {error && <div className="error-box" role="alert">Market feed: {error}</div>}
         <section id="paper-desk" className="panel" style={{marginTop:0,marginBottom:16}}>
           <div className="panel-head"><div><h2 className="panel-title">Spot Paper Trading Desk</h2>
-          <div className="panel-subtitle">Virtual 10,000 USDT starting balance · saved in this browser only</div></div>
+          <div className="panel-subtitle">Virtual 10,000 USDT starting balance · isolated cloud wallet per verified email</div></div>
           <span className="status-pill">{paper.killSwitch?"PAPER HALTED":"PAPER ACTIVE"}</span></div>
           <div className="paper-stats">
            <Kpi label="Paper cash" value={fmt(paper.cash)+" USDT"} foot="Virtual, not exchange funds"/>
            <Kpi label="Estimated equity" value={fmt(equity)+" USDT"} foot="Marks to available public quotes"/>
-           <Kpi label="Today's orders" value={String(todaysPaperTrades.length)+"/6"} foot="UTC day · client-side limit"/>
+           <Kpi label="Today's orders" value={String(todaysPaperTrades.length)+"/6"} foot="UTC day · server-enforced limit"/>
            <Kpi label="Open holdings" value={String(Object.keys(paper.positions).length)} foot="Spot long-only"/>
           </div>
           <div className="paper-trade-row">
@@ -161,8 +212,8 @@ export default function App() {
              <br/>Quote: <b>{currentQuote?.price==null?"Unavailable":fmt(currentQuote.price)}</b>
              <br/>Source: <b>{currentQuote?.source??"Waiting for feed"}</b>
            </div>
-           <button className="btn buy" disabled={paper.killSwitch||!currentQuote} onClick={()=>submitPaper("BUY")}>Simulate BUY</button>
-           <button className="btn sell" disabled={paper.killSwitch||!currentQuote} onClick={()=>submitPaper("SELL")}>Simulate SELL</button>
+           <button className="btn buy" disabled={!user||paperBusy||paper.killSwitch||!currentQuote} onClick={()=>void submitPaper("BUY")}>Simulate BUY</button>
+           <button className="btn sell" disabled={!user||paperBusy||paper.killSwitch||!currentQuote} onClick={()=>void submitPaper("SELL")}>Simulate SELL</button>
           </div>
           {tradeNotice&&<p className="paper-notice" role="status">{tradeNotice}</p>}
           <div className="paper-columns">
@@ -180,7 +231,7 @@ export default function App() {
                <tr><td colSpan={4} className="unknown">No paper orders recorded</td></tr>}</tbody>
             </table></div></div>
           </div>
-          <p className="footer-note">Paper prices are indicative exchange data, not executable quotes. Simulated fees are included; slippage, funding, tax and exchange fills are not. Clearing browser data resets this wallet.</p>
+          <p className="footer-note">Paper prices are indicative exchange data, not executable quotes. Simulated fees are included; slippage, funding, tax and exchange fills are not. Your simulated wallet is stored in D1 under your verified account. It does not represent funds at Binance.</p>
         </section>
         <section className="grid kpi-grid"><Kpi label="Selected market" value={symbol} foot={currentQuote?.source ?? "Exchange source unavailable"} /><Kpi label="Latest close" value={fmt(latest?.close)} foot={latest ? `${interval} candle · ${latest.closed ? "closed" : "forming"}` : "No candle loaded"} /><Kpi label="Latest volume" value={fmt(latest?.volume)} foot={latest ? `Candle time ${new Date(latest.time * 1000).toLocaleString()}` : "Unavailable"} /><Kpi label="Trading mode" value="PAPER" foot="No exchange orders or real funds" /></section>
         <section className="grid main-grid"><div className="grid"><section id="markets" className="panel chart-panel"><div className="panel-head"><div><h2 className="panel-title">Live market chart</h2><div className="panel-subtitle">{feed} · candles from Cloudflare Pages API</div></div><div className="chart-controls">
@@ -195,8 +246,8 @@ export default function App() {
           <br/>Per-order limit <b>5% of paper equity</b><br/>Daily trade limit <b>6 orders</b>
           <br/>Realized loss cap <b>2% of initial virtual balance</b><br/>Estimated fee <b>0.1% per side</b>
           <br/>Leverage and short selling <b>Disabled</b></div>
-          <button className="btn secondary" style={{marginTop:12}} onClick={()=>setPaper(p=>({...p,killSwitch:!p.killSwitch}))}>{paper.killSwitch?"Enable paper orders":"Stop all paper orders"}</button>
-          <p className="footer-note">These client-side limits are not broker-level protections. Real-money trading remains disabled.</p>
+          <button className="btn secondary" style={{marginTop:12}} disabled={!user||paperBusy} onClick={()=>void updatePaperKill()}>{paper.killSwitch?"Enable paper orders":"Stop all paper orders"}</button>
+          <p className="footer-note">Paper order limits are enforced by the server against your private D1 wallet. Real-money trading remains disabled.</p>
           </section></div></section>
         <section id="ai-council" className="panel council-section" style={{marginTop:16}}>
           <div className="panel-head"><div><h2 className="panel-title">APEX Market Evidence Council</h2>
@@ -242,20 +293,35 @@ export default function App() {
           <p className="footer-note">These agents are independent deterministic scanners, not self-learning LLMs. No exchange orders are submitted; no win rate or trading edge is claimed. Values are calculated from source-labelled candles. The skeptic and risk agents veto execution when critical market information is missing.</p>
         </section>
         <section className="panel" style={{marginTop:16}}>
-          <div className="panel-head"><div><h2 className="panel-title">Connect Binance Spot Testnet</h2>
-          <div className="panel-subtitle">Protected account access · virtual funds only</div></div>
-          <span className="status-pill">{binanceAccount?"TESTNET CONNECTED":"ACCOUNT NOT CONNECTED"}</span></div>
-          <div className="signal-detail">Testnet credentials: <b>{binanceStatus?.credentialsConfigured?"Configured":"Not configured"}</b>
-          <br/>Cloudflare Access verification: <b>{binanceStatus?.accessProtectionConfigured?"Configured":"Not configured"}</b>
-          <br/>Live exchange orders: <b>DISABLED</b></div>
-          <button className="btn" style={{marginTop:12}} disabled={checkingAccount}
-             onClick={()=>void checkBinance()}>{checkingAccount?"Checking account...":"Check Binance Testnet connection"}</button>
+          <div className="panel-head"><div><h2 className="panel-title">Your Binance Spot Testnet account</h2>
+          <div className="panel-subtitle">Private per-user encrypted API key · virtual funds only</div></div>
+          <span className="status-pill">{binanceStatus?.connected?"YOUR TESTNET CONNECTED":"NOT CONNECTED"}</span></div>
+          {!user ? <p className="paper-notice">Sign in or register with your own verified email to manage a private Binance Testnet connection.</p> :
+           <>
+            <div className="signal-detail">Logged-in user: <b>{user.email}</b>
+            <br/>Testnet credential: <b>{binanceStatus?.connected?"Connected (ending "+binanceStatus.fingerprint+")":"Not connected"}</b>
+            <br/>Credential encryption: <b>{binanceStatus?.encryptionConfigured?"Configured":"Administrator setup required"}</b>
+            <br/>Real-money execution: <b>DISABLED</b></div>
+            {!binanceStatus?.connected&&<div className="credential-controls">
+              <label>Binance Spot TESTNET API Key<input autoComplete="off" value={testnetKey}
+               onChange={e=>setTestnetKey(e.target.value)} placeholder="Your Testnet API key" /></label>
+              <label>Binance Spot TESTNET Secret<input autoComplete="off" type="password" value={testnetSecret}
+               onChange={e=>setTestnetSecret(e.target.value)} placeholder="Secret stays encrypted on server" /></label>
+              <button className="btn" disabled={connectingTestnet||!binanceStatus?.encryptionConfigured||!testnetKey||!testnetSecret}
+               onClick={()=>void connectTestnet()}>{connectingTestnet?"Verifying Testnet...":"Connect my Spot Testnet"}</button>
+            </div>}
+            <div className="paper-trade-row">
+              <button className="btn secondary" disabled={checkingAccount||!binanceStatus?.connected}
+               onClick={()=>void checkBinance()}>{checkingAccount?"Checking account...":"View my Testnet balances"}</button>
+              <button className="btn secondary" disabled={!binanceStatus?.connected} onClick={()=>void removeTestnet()}>Disconnect my Testnet account</button>
+            </div>
+            {binanceAccount&&<div className="table-wrap"><table className="data-table"><thead>
+              <tr><th>Asset</th><th>Virtual available</th><th>Locked</th></tr></thead><tbody>
+              {binanceAccount.balances.map(x=><tr key={x.asset}><td>{x.asset}</td><td>{x.free}</td><td>{x.locked}</td></tr>)}
+              </tbody></table></div>}
+           </>}
           {accountMessage&&<p className="paper-notice" role="status">{accountMessage}</p>}
-          {binanceAccount&&<div className="table-wrap"><table className="data-table"><thead>
-             <tr><th>Asset</th><th>Available (virtual)</th><th>Locked</th></tr></thead><tbody>
-             {binanceAccount.balances.map(x=><tr key={x.asset}><td>{x.asset}</td><td>{x.free}</td><td>{x.locked}</td></tr>)}
-             </tbody></table></div>}
-          <p className="footer-note">To connect, configure a dedicated Binance SPOT TESTNET key as Cloudflare Pages secrets and protect the account endpoints with Cloudflare Access. Do not enter Binance keys into this website or chat. No real funds or live orders are accessible through this connection.</p>
+          <p className="footer-note">Only individual Spot Testnet HMAC keys are accepted. Never enter normal Binance production keys. Nothing is saved in browser storage or GitHub, and no order-execution endpoint is enabled.</p>
         </section>
         <p className="footer-note">Market prices can change rapidly. Public feed availability is not guaranteed. Informational display only, not investment advice.</p>
       </main></div></div>;

@@ -46,12 +46,21 @@ export interface CouncilReport {
  indicators:{ema20:number;ema50:number;rsi14:number;atr14:number;volumeRatio:number;volatilityPercent:number};
  agents:CouncilAgent[];blockers:string[];dataPoints:number;
 }
+export interface CouncilUser {id:string;email:string}
+export interface PrivatePaperState {wallet:import("./paper-trading").PaperState;version:number|null;storage:string}
+export interface PersonalBinanceStatus {environment:string;connected:boolean;fingerprint:string|null;encryptionConfigured:boolean;ordersEnabled:false}
 export const api = {
   health: () => req<Health>("/health"),
   council: (symbol:string,timeframe:string) => req<CouncilReport>(`/council?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`),
-  binanceStatus: () => req<BinanceConnectionStatus>("/binance/status"),
-  binanceAccount: () => req<BinanceTestnetAccount>("/binance/account"),
-  binanceOrderCheck: (symbol:string,quoteOrderQty:number)=>req<{accepted:boolean;orderSubmitted:boolean}>("/binance/order-check",{method:"POST",body:JSON.stringify({symbol,quoteOrderQty})}),
+  registerOrLogin:()=>req<{user:CouncilUser;registered:boolean}>("/private/me"),
+  privatePaper:()=>req<PrivatePaperState>("/private/paper"),
+  privatePaperOrder:(symbol:string,side:"BUY"|"SELL",amount:number)=>req<{wallet:import("./paper-trading").PaperState;exchangeOrder:false}>("/private/paper/orders",{method:"POST",body:JSON.stringify({symbol,side,amount})}),
+  privatePaperKill:(enabled:boolean)=>req<{wallet:import("./paper-trading").PaperState}>("/private/paper/kill",{method:"POST",body:JSON.stringify({enabled})}),
+  binanceStatus:()=>req<PersonalBinanceStatus>("/private/binance/status"),
+  binanceAccount:()=>req<BinanceTestnetAccount>("/private/binance/account"),
+  saveTestnetCredentials:(apiKey:string,secret:string)=>req<{connected:boolean;fingerprint:string}>("/private/binance/credentials",{method:"PUT",body:JSON.stringify({apiKey,secret})}),
+  disconnectTestnet:()=>req<{connected:false}>("/private/binance/credentials",{method:"DELETE",body:"{}"}),
+  binanceOrderCheck:(symbol:string,amount:number)=>req<{accepted:boolean;orderSubmitted:false}>("/private/binance/order-check",{method:"POST",body:JSON.stringify({symbol,amount})}),
   portfolio: () => req<Portfolio>("/portfolio"),
   scan: (body: { symbol: string; market?: string; timeframe?: string }) => req<ScanResult>("/scan", { method: "POST", body: JSON.stringify(body) }),
   councilTick: () => req<unknown>("/council/tick", { method: "POST", body: "{}" }),
