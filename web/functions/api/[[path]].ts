@@ -1,4 +1,4 @@
-const DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"];
+const DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "DOGEUSDT", "SHIBUSDT", "PEPEUSDT", "BONKUSDT", "FLOKIUSDT"];
 const INTERVALS = new Map([["1m", 60], ["5m", 300], ["15m", 900], ["30m", 1800], ["1h", 3600], ["4h", 21600], ["1d", 86400]]);
 const BINANCE = "https://data-api.binance.vision";
 const COINBASE = "https://api.exchange.coinbase.com";
