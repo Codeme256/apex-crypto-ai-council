@@ -1,3 +1,4 @@
+import {identifySession} from "./email-auth";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 export interface CouncilDatabase {
  prepare(sql:string):{bind(...args:unknown[]):{first<T=Record<string,unknown>>():Promise<T|null>;run():Promise<{meta?:{changes?:number}}>;all<T=Record<string,unknown>>():Promise<{results?:T[]}>};first<T=Record<string,unknown>>():Promise<T|null>;run():Promise<unknown>};
@@ -13,22 +14,8 @@ export function checkOrigin(req:Request):boolean{
  const origin=req.headers.get("origin"),expected=new URL(req.url).origin;
  return origin===expected&&req.headers.get("content-type")?.toLowerCase().startsWith("application/json")===true;
 }
-export async function identity(req:Request,env:Env):Promise<Identity|null>{
- if(!env.ACCESS_TEAM_DOMAIN||!env.ACCESS_AUD||!env.APEX_USERS_DB)return null;
- const domain=env.ACCESS_TEAM_DOMAIN.replace(/\/$/,"");
- if(!/^https:\/\/[a-z0-9-]+\.cloudflareaccess\.com$/i.test(domain))return null;
- const jwt=req.headers.get("Cf-Access-Jwt-Assertion");
- if(!jwt||jwt.length>8192)return null;
- try{
-  const jwks=createRemoteJWKSet(new URL(domain+"/cdn-cgi/access/certs"));
-  const {payload}=await jwtVerify(jwt,jwks,{issuer:domain,audience:env.ACCESS_AUD,algorithms:["RS256"]});
-  if(typeof payload.sub!=="string"||typeof payload.email!=="string"||payload.sub.length>200)return null;
-  const email=payload.email.trim().toLowerCase();
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254)return null;
-  // Stable, provider-supplied signed subject; never trust client-provided user ids.
-  return {id:payload.sub,email};
- }catch{return null;}
-}
+export async function identity(req:Request,env:Env):Promise<Identity|null>{return identifySession(req,env);}
+
 function b64ToBytes(value:string):Uint8Array{
  const bin=atob(value);return Uint8Array.from(bin,c=>c.charCodeAt(0));
 }
