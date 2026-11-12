@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createChart, CrosshairMode, type IChartApi, type ISeriesApi, type CandlestickData, type Time } from "lightweight-charts";
-import { api, type CandleResponse, type Candle, type CouncilReport, type Health } from "./lib/api";
+import { api, type CandleResponse, type Candle, type CouncilReport, type Health, type NewsResponse } from "./lib/api";
 import "./styles/command-center.css";
 import AccountWorkspace from "./AccountWorkspace";
 
@@ -10,7 +10,7 @@ const AGENTS = [
   {id:"SCOUT",name:"Scout",work:"SCANNING",role:"Structure & opportunities",x:9,y:50,initial:"S"},
   {id:"TREND",name:"Trend",work:"ANALYZING",role:"EMA trend validation",x:32,y:17,initial:"T"},
   {id:"MOMENTUM",name:"Momentum",work:"ANALYZING",role:"RSI & trade volume",x:32,y:80,initial:"M"},
-  {id:"NEWS",name:"News",work:"NOT CONNECTED",role:"No verified news source",x:32,y:49,initial:"N"},
+  {id:"NEWS",name:"News",work:"READING HEADLINES",role:"Source-linked crypto news",x:32,y:49,initial:"N"},
   {id:"SKEPTIC",name:"Skeptic",work:"CHALLENGING",role:"Counterarguments",x:56,y:49,initial:"K"},
   {id:"COUNCIL",name:"Council",work:"DECIDING",role:"Final evidence synthesis",x:76,y:49,initial:"Σ"},
   {id:"RISK",name:"Risk",work:"GUARDING",role:"Hard trading restrictions",x:93,y:49,initial:"R"},
@@ -68,54 +68,73 @@ export default function CommandCenter() {
   const [marketAt,setMarketAt]=useState<number|null>(null);
   const [health,setHealth]=useState<Health|null>(null);
   const [council,setCouncil]=useState<CouncilReport|null>(null);
+  const [news,setNews]=useState<NewsResponse|null>(null);
+  const [newsError,setNewsError]=useState("");
   const [marketError,setMarketError]=useState("");
   const [councilError,setCouncilError]=useState("");
   const [updating,setUpdating]=useState(false);
   const [automatic,setAutomatic]=useState(true);
   const [version,setVersion]=useState(0);
-  const requestRef=useRef<AbortController|null>(null);
+  const requestVersion=useRef(0);
 
   const refresh=useCallback(async()=>{
-    if(requestRef.current)requestRef.current.abort();
-    const controller=new AbortController();
-    requestRef.current=controller;
+    const version=++requestVersion.current;
     setUpdating(true);
-    const [prices,assessment,status]=await Promise.allSettled([
-      api.candles(symbol,period,180),api.council(symbol,period),api.health()
+    setMarketError("");setCouncilError("");setNewsError("");
+    // The Council evaluates exactly the candle source and timestamps it returns.
+    // News independently fetches sourced articles and NEVER fabricates a directional score.
+    const [assessment,status,headlines]=await Promise.allSettled([
+      api.council(symbol,period),api.health(),api.news(symbol)
     ]);
-    if(controller.signal.aborted)return;
-    if(prices.status==="fulfilled"&&prices.value.symbol===symbol&&prices.value.interval===period){
-      const result: CandleResponse=prices.value;
-      const verified=result.candles.filter(c=>[c.time,c.open,c.high,c.low,c.close,c.volume].every(Number.isFinite)&&
-        c.time>0&&c.close>0&&c.high>=Math.max(c.open,c.close)&&c.low<=Math.min(c.open,c.close));
-      setCandles(verified);
-      setSource(result.source);
-      setMarketAt(result.retrievedAt);
-      setMarketError(verified.length?"":"The exchange returned no usable candles");
-    }else{
-      setCandles([]);setSource("");setMarketAt(null);
-      setMarketError(prices.status==="rejected"?
-        String(prices.reason instanceof Error?prices.reason.message:prices.reason):
-        "Market symbol or timeframe mismatch");
-    }
-    if(assessment.status==="fulfilled"&&assessment.value.symbol===symbol){
-      setCouncil(assessment.value);
+    if(version!==requestVersion.current)return;
+    let result:CouncilReport|null=null;
+    if(assessment.status==="fulfilled"&&assessment.value.symbol===symbol&&assessment.value.timeframe===period){
+      result=assessment.value;
+      setCouncil(result);
       setCouncilError("");
     }else{
       setCouncil(null);
       setCouncilError(assessment.status==="rejected"?
         String(assessment.reason instanceof Error?assessment.reason.message:assessment.reason):
-        "Council assessment is unavailable for this market");
+        "Council assessment unavailable for the selected market");
+    }
+    let market:CandleResponse|null=result?.market??null;
+    if(!market){
+      // Allow a verified price chart when the Council is unavailable, but show
+      // the Council as unavailable rather than pretending it analyzed these bars.
+      try{market=await api.candles(symbol,period,180)}
+      catch(e){if(version===requestVersion.current)setMarketError(e instanceof Error?e.message:String(e))}
+    }
+    if(version!==requestVersion.current)return;
+    if(market&&market.symbol===symbol&&market.interval===period&&
+      (!result||market.source===result.source)){
+      const valid=market.candles.filter(c=>[c.time,c.open,c.high,c.low,c.close,c.volume].every(Number.isFinite)&&
+        c.time>0&&c.close>0&&c.high>=Math.max(c.open,c.close)&&c.low<=Math.min(c.open,c.close));
+      setCandles(valid);
+      setSource(valid.length?market.source:"");
+      setMarketAt(valid.length?market.retrievedAt:null);
+      if(!valid.length)setMarketError("No verified market candles available");
+    }else{
+      setCandles([]);setSource("");setMarketAt(null);
+      if(!marketError)setMarketError("Market candles unavailable or not from the Council evidence source");
     }
     setHealth(status.status==="fulfilled"?status.value:null);
+    if(headlines.status==="fulfilled"&&headlines.value.symbol===symbol){
+      setNews(headlines.value);
+      setNewsError("");
+    }else{
+      setNews(null);
+      setNewsError(headlines.status==="rejected"?
+        String(headlines.reason instanceof Error?headlines.reason.message:headlines.reason):
+        "News provider result did not match the selected symbol");
+    }
     setUpdating(false);
-    requestRef.current=null;
   },[symbol,period]);
   useEffect(()=>{
     if(!automatic)return;
     void refresh();
     const timer=window.setInterval(()=>{void refresh()},60000);
-    return()=>{window.clearInterval(timer);requestRef.current?.abort();requestRef.current=null};
+    return()=>{window.clearInterval(timer);requestVersion.current++};
   },[refresh,automatic,version]);
 
   const last=candles.at(-1);
@@ -124,7 +143,7 @@ export default function CommandCenter() {
   const byId=Object.fromEntries((council?.agents??[]).map(a=>[a.id,a])) as Record<string,CouncilReport["agents"][number]|undefined>;
   const feedVerified=Boolean(last&&source&&marketAt&&Date.now()-marketAt<120_000);
   const agentState=(id:AgentId)=>{
-    if(id==="NEWS")return "NOT CONNECTED";
+    if(id==="NEWS")return updating?"FETCHING":news?.items.length?"SOURCES VERIFIED":newsError?"UNAVAILABLE":"NO FRESH NEWS";
     if(updating)return AGENTS.find(a=>a.id===id)?.work??"CHECKING";
     if(byId[id])return byId[id]?.state==="BLOCKED"?"VETO":"REPORTED";
     return councilError?"UNAVAILABLE":"WAITING";
@@ -145,13 +164,14 @@ export default function CommandCenter() {
         <a className="cc-menu" href="#market">◉ <span>Live Markets</span></a>
         <a className="cc-menu" href="#arena">⬡ <span>AI Agents</span></a>
         <a className="cc-menu" href="#evidence">▤ <span>Agent Reports</span></a>
+        <a className="cc-menu" href="#news">◈ <span>News Intelligence</span></a>
         <a className="cc-menu" href="#risk">⛨ <span>Risk Control</span></a>
         <p className="cc-menu-label">My workspace</p>
         <a className="cc-menu" href="#account">◫ <span>My Account</span></a>
         <a className="cc-menu" href="#paper-desk">⇄ <span>Paper Trading</span></a>
         <a className="cc-menu" href="#trade-history">▣ <span>Trade History</span></a>
         <a className="cc-menu" href="#binance-testnet">⌘ <span>Binance Testnet</span></a>
-        <a className="cc-menu" href="/api/private/welcome">⇥ <span>Email Sign In</span></a>
+        <a className="cc-menu" href="#account">⇥ <span>Email Sign In</span></a>
         <p className="cc-sidebar-note">Connected to this site's existing Crypto Council API. Live-money order execution is disabled.</p>
       </aside>
       <main className="cc-main">
@@ -169,7 +189,7 @@ export default function CommandCenter() {
         </section>
         <div className="cc-stat-grid">
           <article className="cc-stat"><span>Selected market</span><strong>{symbol.replace("USDT","/USDT")}</strong><small>{source||"Provider unavailable"}</small></article>
-          <article className="cc-stat"><span>Last verified close</span><strong>{format(last?.close)}</strong><small>{percentage===null?"No candle data":(percentage>=0?"+":"")+percentage.toFixed(2)+"% in displayed window"}</small></article>
+          <article className="cc-stat"><span>Current exchange quote</span><strong>{council?.quote&&Date.now()-council.quote.timestamp<90000?format(council.quote.price):"—"}</strong><small>{council?.quote?council.quote.source+" · "+clock(council.quote.timestamp):"Verified quote unavailable"} · last candle {format(last?.close)}</small></article>
           <article className="cc-stat"><span>Council verdict</span><strong className={council?.verdict==="WATCH"?"cc-lime":"cc-amber"}>{council?.verdict??"UNAVAILABLE"}</strong><small>{council?.bias??"No verified assessment"} · no trades</small></article>
           <article className="cc-stat"><span>API status</span><strong>{health?.overall??"UNAVAILABLE"}</strong><small>{health?.modeDefault??"NO DATA"} · last update {clock(marketAt)}</small></article>
         </div>
@@ -182,16 +202,16 @@ export default function CommandCenter() {
             </svg>
             {AGENTS.map(a=>{
               const found=byId[a.id];
-              const working=updating&&a.id!=="NEWS";
-              return <div className={"cc-node "+(working?"cc-working ":"")+(found?.assessment==="VETO"?"cc-veto ":"")+(a.id==="NEWS"?"cc-offline":"")} key={a.id} style={{left:a.x+"%",top:a.y+"%"}}>
+              const working=updating;
+              return <div className={"cc-node "+(working?"cc-working ":"")+(found?.assessment==="VETO"?"cc-veto ":"")+(a.id==="NEWS"&&!news?.items.length?"cc-offline":"")} key={a.id} style={{left:a.x+"%",top:a.y+"%"}}>
                 <div className="cc-node-icon">{a.initial}</div>
                 <b>{a.name}</b>
                 <small>{agentState(a.id)}</small>
-                <span className="cc-assessment">{found?.assessment??(a.id==="NEWS"?"UNAVAILABLE":"—")}</span>
+                <span className="cc-assessment">{a.id==="NEWS"?(news?.items.length?"HEADLINES":"UNAVAILABLE"):(found?.assessment??"—")}</span>
               </div>;
             })}
           </div>
-          <p className="cc-hint">Six evidence agents are connected: Scout, Trend, Momentum, Skeptic, Council and Risk. News remains disconnected until a verified news API is implemented.</p>
+          <p className="cc-hint">Six technical agents analyze the same exchange candle snapshot displayed on this chart. News separately reports source-linked headlines, not a directional trading signal.</p>
         </section>
         <div className="cc-lower">
           <section id="market" className="cc-panel">
@@ -209,6 +229,28 @@ export default function CommandCenter() {
             </article>):<p className="cc-muted">No verified council report received. No agent dialogue is invented.</p>}</div>
           </section>
         </div>
+        <section id="news" className="cc-panel cc-news">
+          <div className="cc-panel-head">
+            <div><h2>News Intelligence</h2><p>Verified publisher headlines · no invented sentiment or price predictions</p></div>
+            <span className={"cc-chip "+(news?.items.length?"cc-good":"cc-warn")}>
+              {updating?"CHECKING SOURCES":news?.items.length?news.status+" · "+news.items.length+" ARTICLES":"SOURCE UNAVAILABLE"}
+            </span>
+          </div>
+          <p className="cc-hint">
+            Selected market: {symbol} · Publisher feed check: {news?clock(news.retrievedAt):"Not available"}
+            {news?.sourcesAvailable?.length?" · Available: "+news.sourcesAvailable.join(", "):""}
+            {news?.sourcesUnavailable?.length?" · Unavailable: "+news.sourcesUnavailable.join(", "):""}
+          </p>
+          {newsError&&<div className="cc-error" role="alert">News providers: {newsError}. No headlines or market impact ratings have been fabricated.</div>}
+          {news?.items.length?<div className="cc-news-grid">{news.items.map(item=>
+            <article className="cc-news-card" key={item.url}>
+              <div className="cc-news-meta"><span>{item.source}</span><span>{item.relevance==="SYMBOL"?"SYMBOL MENTION":"CRYPTO MARKET"}</span></div>
+              <a href={item.url} target="_blank" rel="noopener noreferrer">{item.title}</a>
+              <time dateTime={new Date(item.publishedAt).toISOString()}>{new Date(item.publishedAt).toLocaleString()}</time>
+            </article>
+          )}</div>:<p className="cc-muted">{updating?"Retrieving current publisher headlines…":"No verified headlines available at present."}</p>}
+          <p className="cc-hint">Headline relevance comes from keyword matching, not an AI prediction. News is displayed independently and does not override trading risk limits or imply that a price movement was caused by a story.</p>
+        </section>
         <section id="risk" className="cc-panel cc-risk">
           <div className="cc-panel-head"><div><h2>Risk Gate &amp; Execution</h2><p>Backend-enforced restrictions · API read-only</p></div><span className="cc-chip cc-warn">LIVE ORDER EXECUTION DISABLED</span></div>
           <div className="cc-risk-metrics"><div><span>Decision</span><strong>{council?.verdict??"WAIT"}</strong></div>
