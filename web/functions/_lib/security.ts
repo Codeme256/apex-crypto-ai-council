@@ -54,7 +54,7 @@ export async function decrypt(env:Env,userId:string,ciphertext:string):Promise<s
  const [version,nonce,data]=ciphertext.split(":");if(version!=="v1"||!nonce||!data)throw Error("Unknown encryption record");
  const iv=b64ToBytes(nonce),bytes=b64ToBytes(data);
  if(iv.length!==12)throw Error("Invalid encrypted record");
- const plain=await crypto.subtle.decrypt({name:"AES-GCM",iv,additionalData:encoder.encode("apex-testnet:"+userId)},key,bytes);
+ const plain=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv.buffer as ArrayBuffer,additionalData:encoder.encode("apex-testnet:"+userId)},key,bytes.buffer as ArrayBuffer);
  return new TextDecoder().decode(plain);
 }
 export async function ensureUser(db:CouncilDatabase,who:Identity,now:number){
