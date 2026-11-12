@@ -33,7 +33,7 @@ export function evaluateCouncil(args:{symbol:string;timeframe:string;source:stri
   c.close>0&&c.high>=Math.max(c.open,c.close)&&c.low<=Math.min(c.open,c.close)&&c.volume>=0)
   .sort((a,b)=>a.time-b.time).slice(-130);
  if(values.length<65)throw new Error("At least 65 verified closed candles are required");
- if(values.some((c,i)=>i>0&&c.time-values[i-1].time!==duration))throw new Error("Missing or irregular candles; analysis blocked");
+ const gaps=values.some((c,i)=>i>0&&c.time-values[i-1].time!==duration);
  const last=values.at(-1)!;
  const closes=values.map(c=>c.close),volumes=values.map(c=>c.volume);
  const ema20=ema(closes,20),ema50=ema(closes,50),rsi14=rsi(closes),atr14=atr(values);
@@ -41,6 +41,7 @@ export function evaluateCouncil(args:{symbol:string;timeframe:string;source:stri
  const volatilityPercent=atr14/last.close*100;
  const trend:CouncilResult["bias"]=ema20>ema50&&last.close>ema20?"BULLISH":ema20<ema50&&last.close<ema20?"BEARISH":"NEUTRAL";
  const blockers:string[]=[];
+ if(gaps)blockers.push("Missing or irregular candle intervals; indicators are indicative only and any trade is blocked");
  const staleCandle=now-(last.time+duration)*1000>Math.max(2*duration*1000,15*60000);
  if(staleCandle||last.time*1000>now)blockers.push("Closed candle data stale or future-dated");
  if(!quote||!Number.isFinite(quote.price)||quote.price<=0||now-quote.timestamp>90000||quote.timestamp>now+10000)
