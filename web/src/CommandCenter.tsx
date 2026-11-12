@@ -171,7 +171,6 @@ export default function CommandCenter() {
         <a className="cc-menu" href="#paper-desk">⇄ <span>Paper Trading</span></a>
         <a className="cc-menu" href="#trade-history">▣ <span>Trade History</span></a>
         <a className="cc-menu" href="#binance-testnet">⌘ <span>Binance Testnet</span></a>
-        <a className="cc-menu" href="#account">⇥ <span>My APEX Account</span></a>
         <p className="cc-sidebar-note">Connected to this site's existing Crypto Council API. Live-money order execution is disabled.</p>
       </aside>
       <main className="cc-main">
