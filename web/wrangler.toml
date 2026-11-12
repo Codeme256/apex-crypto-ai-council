@@ -1,0 +1,6 @@
+name = "apex-war-room"
+pages_build_output_dir = "./dist"
+compatibility_date = "2026-11-12"
+
+[vars]
+MARKET_SYMBOLS = "BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT"
