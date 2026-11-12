@@ -10,6 +10,11 @@ const errorMessage=(e:unknown)=>e instanceof Error?e.message:"An unexpected erro
 export default function AccountWorkspace({symbol}:{symbol:string}) {
  const [user,setUser]=useState<CouncilUser|null>(null);
  const [sessionChecked,setSessionChecked]=useState(false);
+ const [authMode,setAuthMode]=useState<"login"|"register">("login");
+ const [authEmail,setAuthEmail]=useState("");
+ const [authPassword,setAuthPassword]=useState("");
+ const [authBusy,setAuthBusy]=useState(false);
+ const [authError,setAuthError]=useState("");
  const [sessionBusy,setSessionBusy]=useState(false);
  const [sessionError,setSessionError]=useState("");
  const [wallet,setWallet]=useState<PaperState|null>(null);
@@ -52,6 +57,32 @@ export default function AccountWorkspace({symbol}:{symbol:string}) {
    if(!/401|sign in|not authenticated/i.test(message))setSessionError(message);
   } finally {setSessionChecked(true);setSessionBusy(false)}
  },[]);
+
+ async function submitAuth(e:React.FormEvent<HTMLFormElement>){
+  e.preventDefault();
+  if(authBusy)return;
+  setAuthBusy(true);setAuthError("");
+  try{
+   if(authMode==="login")await api.emailLogin(authEmail.trim(),authPassword);
+   else await api.emailSignup(authEmail.trim(),authPassword);
+   setAuthPassword("");
+   await loadSession();
+   document.getElementById("paper-desk")?.scrollIntoView({behavior:"smooth"});
+  }catch(e){
+   setAuthError(errorMessage(e));
+  }finally{setAuthBusy(false)}
+ }
+ async function signOut(){
+  if(authBusy)return;
+  setAuthBusy(true);setAuthError("");
+  try{
+   await api.logout();
+   setUser(null);setWallet(null);setTestnetStatus(null);setTestnetAccount(null);
+   setKey("");setSecret("");setAuthPassword("");
+   setPaperNotice("");setTestnetMessage("");
+  }catch(e){setAuthError(errorMessage(e))}
+  finally{setAuthBusy(false)}
+ }
 
  const loadQuotes=useCallback(async()=>{
   try {
@@ -138,12 +169,27 @@ export default function AccountWorkspace({symbol}:{symbol:string}) {
    {!sessionChecked?<p className="cc-muted">Checking your secure login…</p>:
     !user?<div className="cc-user-line">
       <div><strong>You are viewing public market data</strong><p className="cc-hint">Sign in with your email to access your existing private paper wallet and your own Binance Testnet connection. No new wallet or broker account is required.</p></div>
-      <a className="cc-action-link" href="/api/private/welcome">Register / Sign in with email</a>
+      <div className="cc-auth-panel">
+       <div className="cc-auth-switch">
+        <button type="button" className={authMode==="login"?"cc-auth-selected":""} onClick={()=>{setAuthMode("login");setAuthError("");}} disabled={authBusy}>Sign in</button>
+        <button type="button" className={authMode==="register"?"cc-auth-selected":""} onClick={()=>{setAuthMode("register");setAuthError("");}} disabled={authBusy}>Create account</button>
+       </div>
+       <form className="cc-auth-form" onSubmit={e=>void submitAuth(e)}>
+        <label htmlFor="cc-login-email">Email address<input id="cc-login-email" type="email" value={authEmail}
+          onChange={e=>setAuthEmail(e.target.value)} placeholder="you@gmail.com" autoComplete="email" required/></label>
+        <label htmlFor="cc-login-password">Password<input id="cc-login-password" type="password" value={authPassword}
+          onChange={e=>setAuthPassword(e.target.value)} autoComplete={authMode==="login"?"current-password":"new-password"}
+          minLength={12} maxLength={128} required placeholder="Minimum 12 characters"/></label>
+        <button type="submit" disabled={authBusy}>{authBusy?"Verifying…":authMode==="login"?"Sign in to my account":"Create my account"}</button>
+       </form>
+       {authError&&<div role="alert" className="cc-error">{authError}</div>}
+       <p className="cc-hint">Use your own Gmail or any email address with a password. This is APEX email/password authentication, not Google OAuth or a Cloudflare account. Email verification and password recovery are not yet available.</p>
+      </div>
     </div>:<div className="cc-user-line">
       <div><span className="cc-hint">Signed in as</span><strong>{user.email}</strong><p className="cc-hint">Your virtual wallet and credentials are accessible only within this verified account.</p></div>
       <div className="cc-workspace-actions">
        <button type="button" onClick={()=>void loadSession()} disabled={sessionBusy}>Refresh my account</button>
-       <a className="cc-action-link cc-neutral" href="https://dawn-shadow-4219.cloudflareaccess.com/cdn-cgi/access/logout">Sign out</a>
+       <button className="cc-action-link cc-neutral" type="button" disabled={authBusy} onClick={()=>void signOut()}>Sign out</button>
       </div>
     </div>}
   </section>
