@@ -59,6 +59,7 @@ export async function onRequest({request,env}:Ctx):Promise<Response>{
  const route=new URL(request.url).pathname.replace(/^\/api\/private\/?/,"").replace(/\/$/,"");
  try{
   await ensureUser(env.APEX_USERS_DB,who,Date.now());
+  if(route==="welcome"&&request.method==="GET")return Response.redirect(new URL("/",request.url).toString(),302);
   if(route==="me"&&request.method==="GET")return respond({user:{email:who.email,id:who.id},mode:"SPOT_TESTNET_AND_PAPER",registered:true});
   if(route==="paper"&&request.method==="GET"){
    const {wallet,version}=await getWallet(env,who.id);
