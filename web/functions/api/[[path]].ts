@@ -18,7 +18,7 @@ type Ticker = { symbol: string; price: number | null; ok: boolean; source: strin
 type Candle = { time: number; open: number; high: number; low: number; close: number; volume: number; closed: boolean };
 const json = (value: unknown, status = 200, cache = "no-store") => new Response(JSON.stringify(value), {
   status,
-  headers: { "content-type": "application/json; charset=utf-8", "cache-control": cache, "x-content-type-options": "nosniff" },
+  headers: { "content-type": "application/json; charset=utf-8", "cache-control": cache, "x-content-type-options": "nosniff", "access-control-allow-origin": "https://apex-ai-trade-war-room.pages.dev", "vary": "Origin" },
 });
 
 async function providerJson(url: string): Promise<unknown> {
