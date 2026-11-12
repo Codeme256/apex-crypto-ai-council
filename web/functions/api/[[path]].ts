@@ -1,6 +1,7 @@
 const DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"];
 const INTERVALS = new Set(["1m", "5m", "15m", "30m", "1h", "4h", "1d"]);
-const BINANCE = "https://api.binance.com";
+// Binance documents this host for unauthenticated public market-data requests.
+const BINANCE = "https://data-api.binance.vision";
 
 type Env = { MARKET_SYMBOLS?: string };
 type PagesContext = { request: Request; env: Env };
