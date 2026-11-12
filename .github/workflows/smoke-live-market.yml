@@ -1,0 +1,55 @@
+name: Smoke test APEX live market feed
+on:
+  push:
+    branches:
+      - feat/apex-war-room-completion
+permissions:
+  contents: read
+jobs:
+  public-market:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify live price, market candles, and analysis availability
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 35
+          python - <<'PY'
+          import json, time, urllib.request
+          base = "https://apex-crypto-ai-council.pages.dev"
+          paths = [
+              "/api/health",
+              "/api/ticker?symbols=BTCUSDT",
+              "/api/klines?symbol=BTCUSDT&interval=15m&limit=100",
+              "/api/council?symbol=BTCUSDT&timeframe=15m",
+          ]
+          failed = []
+          for path in paths:
+              ok = False
+              for attempt in range(4):
+                  try:
+                      with urllib.request.urlopen(base + path, timeout=35) as response:
+                          data = json.load(response)
+                      if path.startswith("/api/ticker"):
+                          assert data["tickers"][0]["ok"], "No BTCUSDT quote"
+                          print("TICKER", data["tickers"][0]["source"])
+                      if path.startswith("/api/klines"):
+                          assert len(data["candles"]) >= 65, "Insufficient OHLC history"
+                          print("CANDLES", len(data["candles"]), data["source"])
+                      if path.startswith("/api/council"):
+                          assert len(data["agents"]) == 6, "Not all agents returned"
+                          assert data["riskAllowed"] is False, "Unexpected execution permission"
+                          print("COUNCIL", data["source"], data["verdict"])
+                      if path.startswith("/api/health"):
+                          assert data["service"] == "apex-market-api"
+                      ok = True
+                      break
+                  except Exception as e:
+                      print("Retry", path.split("?")[0], attempt + 1, type(e).__name__, str(e)[:140])
+                      time.sleep(6)
+              if not ok:
+                  failed.append(path.split("?")[0])
+          if failed:
+              raise SystemExit("Live market verification unavailable: " + ", ".join(failed))
+          print("LIVE MARKET API AND COUNCIL VERIFIED")
+          PY
