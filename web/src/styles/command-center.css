@@ -137,3 +137,15 @@
  .cc-credentials button{grid-column:1}
  .cc-workspace{scroll-margin-top:60px}
 }
+
+/* The Command Center has a real inline authentication form; never link users to an API route. */
+.cc-auth-content{display:grid;gap:12px;max-width:440px}
+.cc-auth-content>strong{color:#e8f8ff;font-size:1rem}
+.cc-auth-form{display:grid;gap:10px;max-width:420px}
+.cc-auth-form label{font-weight:600;color:#bad1e5;font-size:.84rem}
+.cc-auth-form input{display:block;width:100%;min-height:46px;background:#0b1726;color:#e8f8ff;border:1px solid #3e5976;border-radius:10px;padding:11px 13px;font:inherit}
+.cc-auth-form input:focus-visible{outline:2px solid #49e3ef;outline-offset:2px}
+.cc-auth-form .cc-auth-submit{border:0;background:#1bb6c2;color:#06151e;font-weight:800;padding:12px 20px;border-radius:10px;margin-top:6px;cursor:pointer}
+.cc-auth-form button:disabled,.cc-auth-switch:disabled{opacity:.6;cursor:wait}
+.cc-auth-switch{background:transparent;color:#5ce3e6;border:0;padding:6px 0;text-align:left;cursor:pointer;font-weight:600;justify-self:start}
+.cc-auth-content .cc-notice{overflow-wrap:anywhere}
