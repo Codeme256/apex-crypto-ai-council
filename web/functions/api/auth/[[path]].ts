@@ -9,6 +9,21 @@ export async function onRequest({request,env}:Ctx):Promise<Response>{
  if(request.method==="POST"&&!checkOrigin(request))return respond({error:"Invalid request origin"},403);
  const db=env.APEX_USERS_DB;
  try{
+  if(path==="health"&&request.method==="GET"){
+    const checks:{database:boolean;random:boolean;passwordDerivation:boolean}={database:false,random:false,passwordDerivation:false};
+    try{
+      await db.prepare("SELECT COUNT(*) AS count FROM council_users").first();
+      checks.database=true;
+    }catch(e){console.error("Auth health database error",e instanceof Error?e.name:"unknown");}
+    try{
+      const salt=crypto.getRandomValues(new Uint8Array(16));
+      checks.random=!!crypto.randomUUID()&&salt.length===16;
+      const key=await crypto.subtle.importKey("raw",new TextEncoder().encode("health-test-password-not-a-user"),"PBKDF2",false,["deriveBits"]);
+      const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt,iterations:310000,hash:"SHA-256"},key,256);
+      checks.passwordDerivation=bits.byteLength===32;
+    }catch(e){console.error("Auth health crypto error",e instanceof Error?e.name:"unknown");}
+    return respond({ready:Object.values(checks).every(Boolean),checks},Object.values(checks).every(Boolean)?200:503);
+  }
   if(path==="me"&&request.method==="GET"){
    const who=await identifySession(request,env);
    return who?respond({user:who}):respond({error:"Sign in required"},401);
@@ -43,7 +58,7 @@ export async function onRequest({request,env}:Ctx):Promise<Response>{
   return respond({error:"Not found"},404);
  }catch(e){
   if(String(e).includes("UNIQUE"))return respond({error:"Email already registered"},409);
-  console.error("Authentication failed",e instanceof Error?e.name:"unknown");
+  console.error("Authentication failed",e instanceof Error?e.message:"unknown");
   return respond({error:"Account service unavailable"},503);
  }
 }
