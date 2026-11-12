@@ -13,12 +13,16 @@ export async function onRequest({request,env}:Context):Promise<Response>{
   const candleUrl=new URL("/api/klines",url.origin);
   candleUrl.searchParams.set("symbol",symbol);candleUrl.searchParams.set("interval",timeframe);candleUrl.searchParams.set("limit","125");
   const quoteUrl=new URL("/api/ticker",url.origin);quoteUrl.searchParams.set("symbols",symbol);
-  const [candleResponse,quoteResponse]=await Promise.all([
-   marketApi({request:new Request(candleUrl.toString()),env}),
-   marketApi({request:new Request(quoteUrl.toString()),env})
-  ]);
-  if(!candleResponse.ok||!quoteResponse.ok)return json({error:"Market evidence unavailable; agents cannot report without verified data",upstream:{candles:candleResponse.status,quotes:quoteResponse.status}},503);
+  const candleResponse=await marketApi({request:new Request(candleUrl.toString()),env});
+  if(!candleResponse.ok)return json({error:"Market candles unavailable; agents cannot analyze without source evidence",upstream:{candles:candleResponse.status}},503);
   const candles=await candleResponse.json() as {candles:import("../../src/lib/council-analysis").MarketCandle[];source:string;retrievedAt:number};
+  // Request the current quote from the exact exchange which supplied the candles.
+  // Otherwise Binance candles compared with Coinbase/Kraken prices may falsely imply momentum.
+  const provider=candles.source.startsWith("Binance")?"binance":candles.source.startsWith("Coinbase")?"coinbase":candles.source.startsWith("Kraken")?"kraken":null;
+  if(!provider)return json({error:"Unknown candle source; council analysis blocked"},503);
+  quoteUrl.searchParams.set("provider",provider);
+  const quoteResponse=await marketApi({request:new Request(quoteUrl.toString()),env});
+  if(!quoteResponse.ok)return json({error:"Current quote unavailable from candle exchange",upstream:{quotes:quoteResponse.status}},503);
   const tickers=await quoteResponse.json() as {tickers:Array<{price:number|null;ok:boolean;source:string;timestamp:number}>};
   const tick=tickers.tickers[0];
   if(!candles.candles?.length)return json({error:"No verified candles available"},503);
