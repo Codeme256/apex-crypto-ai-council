@@ -13,9 +13,13 @@ export const validEmail=(value:unknown):value is string=>typeof value==="string"
 export const validPassword=(value:unknown):value is string=>typeof value==="string"&&value.length>=12&&value.length<=128;
 export const canonicalEmail=(value:string)=>value.trim().toLowerCase();
 
-async function derive(password:string,salt:Uint8Array){
+// Cloudflare production Workers enforce a 100,000-iteration ceiling per PBKDF2 call.
+// Do not raise this above the runtime limit. Upgrade to stronger KDF infrastructure
+// before treating public account authentication as production hardened.
+export const PBKDF2_ITERATIONS=100000;
+export async function derive(password:string,salt:Uint8Array){
  const key=await crypto.subtle.importKey("raw",enc.encode(password),"PBKDF2",false,["deriveBits"]);
- const hash=await crypto.subtle.deriveBits({name:"PBKDF2",salt:salt.buffer as ArrayBuffer,iterations:310000,hash:"SHA-256"},key,256);
+ const hash=await crypto.subtle.deriveBits({name:"PBKDF2",salt:salt.buffer as ArrayBuffer,iterations:PBKDF2_ITERATIONS,hash:"SHA-256"},key,256);
  return bytesToHex(new Uint8Array(hash));
 }
 const parseToken=(req:Request)=>req.headers.get("cookie")?.match(/(?:^|;\s*)apex_session=([a-f0-9]{64})(?:;|$)/)?.[1]||null;
