@@ -45,12 +45,16 @@ export interface CouncilReport {
  quote:{price:number;timestamp:number;source:string}|null;
  indicators:{ema20:number;ema50:number;rsi14:number;atr14:number;volumeRatio:number;volatilityPercent:number};
  agents:CouncilAgent[];blockers:string[];dataPoints:number;
+ market?:CandleResponse;
 }
+export interface NewsArticle {title:string;url:string;source:string;publishedAt:number;relevance:"SYMBOL"|"MARKET";symbol:string}
+export interface NewsResponse {symbol:string;retrievedAt:number;items:NewsArticle[];sourcesAvailable:string[];sourcesUnavailable:string[];status:"OK"|"DEGRADED";note:string}
 export interface CouncilUser {id:string;email:string}
 export interface PrivatePaperState {wallet:import("./paper-trading").PaperState;version:number|null;storage:string}
 export interface PersonalBinanceStatus {environment:string;connected:boolean;fingerprint:string|null;encryptionConfigured:boolean;ordersEnabled:false}
 export const api = {
   health: () => req<Health>("/health"),
+  news: (symbol:string) => req<NewsResponse>(`/news?symbol=${encodeURIComponent(symbol)}`),
   council: (symbol:string,timeframe:string) => req<CouncilReport>(`/council?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`),
   emailSignup:(email:string,password:string)=>req<{user:CouncilUser}>("/auth/register",{method:"POST",body:JSON.stringify({email,password})}),
   emailLogin:(email:string,password:string)=>req<{user:CouncilUser}>("/auth/login",{method:"POST",body:JSON.stringify({email,password})}),
