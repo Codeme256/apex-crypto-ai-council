@@ -24,7 +24,7 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Test paper trading risk controls
         working-directory: web
-        run: npx vitest run src/lib/paper-trading.test.ts src/lib/council-analysis.test.ts functions/api/market-fallback.test.ts functions/_lib/security.test.ts
+        run: npx vitest run src/lib/paper-trading.test.ts src/lib/council-analysis.test.ts functions/api/market-fallback.test.ts functions/_lib/security.test.ts functions/_lib/email-auth.test.ts
       - name: Typecheck and compile Cloudflare Pages dashboard
         working-directory: web
         run: npm run build
