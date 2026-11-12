@@ -4,7 +4,7 @@ export interface CouncilDatabase {
 }
 export type Env={
  APEX_USERS_DB?:CouncilDatabase;
- ACCESS_TEAM_DOMAIN?:string; ACCESS_AUD?:string; CREDENTIAL_ENCRYPTION_KEY?:string;
+ ACCESS_TEAM_DOMAIN?:string; ACCESS_AUD?:string; CREDENTIAL_ENCRYPTION_KEY?:string; MARKET_SYMBOLS?:string;
 };
 export type Identity={id:string;email:string};
 const encoder=new TextEncoder();
@@ -46,7 +46,7 @@ export async function cryptoReady(env:Env){return Boolean(await cipherKey(env));
 export async function encrypt(env:Env,userId:string,plaintext:string):Promise<string>{
  const key=await cipherKey(env);if(!key)throw Error("Credential encryption is not configured");
  const iv=crypto.getRandomValues(new Uint8Array(12));
- const ciphertext=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv,additionalData:encoder.encode("apex-testnet:"+userId)},key,encoder.encode(plaintext)));
+ const ciphertext=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv:iv.buffer as ArrayBuffer,additionalData:encoder.encode("apex-testnet:"+userId)},key,encoder.encode(plaintext)));
  return "v1:"+bytesToB64(iv)+":"+bytesToB64(ciphertext);
 }
 export async function decrypt(env:Env,userId:string,ciphertext:string):Promise<string>{
