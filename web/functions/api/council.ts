@@ -28,7 +28,9 @@ export async function onRequest({request,env}:Context):Promise<Response>{
   if(!candles.candles?.length)return json({error:"No verified candles available"},503);
   const result=evaluateCouncil({symbol,timeframe,source:candles.source,retrievedAt:candles.retrievedAt,
    now:Date.now(),candles:candles.candles,quote:tick?.ok&&tick.price!==null?{price:tick.price,timestamp:tick.timestamp,source:tick.source}:null});
-  return json(result);
+  // Return the exact source snapshot evaluated by the agents. The UI must
+  // never show Coinbase chart data beside a Binance-only council opinion.
+  return json({...result,market:{symbol,interval:timeframe,source:candles.source,retrievedAt:candles.retrievedAt,candles:candles.candles}});
  }catch(error){
   return json({error:error instanceof Error?error.message:"Evidence analysis unavailable"},503);
  }
