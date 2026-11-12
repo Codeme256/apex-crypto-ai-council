@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feat/paper-trading-meme-markets-testnet-connection
+      - feat/evidence-council-agents
   pull_request:
     branches:
       - feat/apex-war-room-completion
@@ -21,7 +22,11 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Test paper trading risk controls
         working-directory: web
-        run: npx vitest run src/lib/paper-trading.test.ts
+        run: npx vitest run src/lib/paper-trading.test.ts src/lib/council-analysis.test.ts
       - name: Typecheck and compile Cloudflare Pages dashboard
         working-directory: web
         run: npm run build
+
+      - name: Typecheck Cloudflare Pages council functions
+        working-directory: web
+        run: npx tsc --noEmit --target ES2022 --lib ES2022,DOM --module ESNext --moduleResolution bundler --skipLibCheck functions/api/council.ts

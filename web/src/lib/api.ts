@@ -38,8 +38,17 @@ export interface CandleResponse { symbol: string; interval: string; source: stri
 
 export interface BinanceConnectionStatus {environment:string;credentialsConfigured:boolean;accessProtectionConfigured:boolean;ordersEnabled:boolean;note:string}
 export interface BinanceTestnetAccount {environment:string;canTrade:boolean;balances:Array<{asset:string;free:string;locked:string}>;updatedAt:number;liveFunds:boolean}
+export interface CouncilAgent {id:string;role:string;state:"COMPLETE"|"BLOCKED";assessment:"BULLISH"|"BEARISH"|"NEUTRAL"|"VETO";summary:string;observations:string[];latencyMs:number}
+export interface CouncilReport {
+ symbol:string;timeframe:string;source:string;asOf:number;lastCandleTime:number;
+ mode:"ADVISORY_ONLY";model:string;bias:"BULLISH"|"BEARISH"|"NEUTRAL";verdict:"WATCH"|"WAIT";riskAllowed:false;
+ quote:{price:number;timestamp:number;source:string}|null;
+ indicators:{ema20:number;ema50:number;rsi14:number;atr14:number;volumeRatio:number;volatilityPercent:number};
+ agents:CouncilAgent[];blockers:string[];dataPoints:number;
+}
 export const api = {
   health: () => req<Health>("/health"),
+  council: (symbol:string,timeframe:string) => req<CouncilReport>(`/council?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`),
   binanceStatus: () => req<BinanceConnectionStatus>("/binance/status"),
   binanceAccount: () => req<BinanceTestnetAccount>("/binance/account"),
   binanceOrderCheck: (symbol:string,quoteOrderQty:number)=>req<{accepted:boolean;orderSubmitted:boolean}>("/binance/order-check",{method:"POST",body:JSON.stringify({symbol,quoteOrderQty})}),
