@@ -4,3 +4,8 @@ compatibility_date = "2026-11-12"
 
 [vars]
 MARKET_SYMBOLS = "BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,DOGEUSDT,SHIBUSDT,PEPEUSDT,BONKUSDT,FLOKIUSDT"
+
+[[d1_databases]]
+binding = "APEX_USERS_DB"
+database_name = "apex-crypto-council-users"
+database_id = "93a1db6b-9e80-459e-92d4-3866241263ec"
