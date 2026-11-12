@@ -26,16 +26,16 @@ async function providerJson(url: string): Promise<unknown> {
   if (!response.ok) throw new Error(`Provider HTTP ${response.status}`);
   return response.json();
 }
-async function ticker(symbol: string): Promise<Ticker> {
+async function ticker(symbol: string,preferred: "binance"|"coinbase"|"kraken"|null=null): Promise<Ticker> {
   // Binance is the requested authoritative source. Never substitute Coinbase
   // without making its exchange name explicit in the response.
-  try {
+  if(!preferred||preferred==="binance")try {
     const data = await providerJson(`${BINANCE}/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`) as { price?: string };
     const price = Number(data.price);
     if (Number.isFinite(price) && price > 0) return { symbol, price, ok: true, source: "Binance Spot REST", timestamp: Date.now() };
   } catch { /* Binance public feed can be region/WAF blocked at the edge. */ }
   const product = symbol.replace(/(USDT|USDC|USD)$/, "-$1");
-  try {
+  if(!preferred||preferred==="coinbase")try {
     const data = await providerJson(`${COINBASE}/products/${encodeURIComponent(product)}/ticker`) as { price?: string; time?: string };
     const price = Number(data.price);
     const parsedTime = data.time ? Date.parse(data.time) : NaN;
@@ -45,7 +45,7 @@ async function ticker(symbol: string): Promise<Ticker> {
     };
   } catch { /* A quote must never be invented from another instrument. */ }
   const krakenPair=KRAKEN_PAIRS[symbol];
-  if(krakenPair){
+  if(krakenPair&&(!preferred||preferred==="kraken")){
    try{
     const result=await krakenJson("/0/public/Ticker?pair="+encodeURIComponent(krakenPair)) as Record<string,{c?:string[]}>;
     const item=Object.values(result)[0];const price=Number(item?.c?.[0]);
@@ -105,7 +105,9 @@ export async function onRequest({ request, env }: PagesContext): Promise<Respons
   if (route === "ticker") {
     const requested = url.searchParams.get("symbols")?.split(",").map(s => s.trim().toUpperCase()).filter(Boolean) ?? [...allowed];
     if (!requested.length || requested.length > 20 || requested.some(s => !allowed.has(s))) return json({ error: "Use up to 20 configured market symbols" }, 400);
-    const tickers = await Promise.all(requested.map(ticker));
+    const requestedProvider=url.searchParams.get("provider");
+    if(requestedProvider&&!["binance","coinbase","kraken"].includes(requestedProvider))return json({error:"Unsupported exchange provider"},400);
+    const tickers = await Promise.all(requested.map(symbol=>ticker(symbol,requestedProvider as "binance"|"coinbase"|"kraken"|null)));
     return json({ tickers }, 200, "public, max-age=3, stale-while-revalidate=5");
   }
   if (route === "klines") {
