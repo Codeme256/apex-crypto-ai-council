@@ -7,7 +7,7 @@ describe("Legacy welcome link",()=>{
   const request=new Request("https://apex-crypto-ai-council.pages.dev/api/private/welcome");
   const response=await onRequest({request,env:{} as Env});
   expect(response.status).toBe(303);
-  expect(response.headers.get("location")).toBe("https://apex-crypto-ai-council.pages.dev/?view=console#account-access");
+  expect(response.headers.get("location")).toBe("https://apex-crypto-ai-council.pages.dev/#account");
  });
  it("does not provide any access to protected private account resources",async()=>{
   const request=new Request("https://apex-crypto-ai-council.pages.dev/api/private/me");

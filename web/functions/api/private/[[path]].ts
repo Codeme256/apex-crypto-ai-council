@@ -54,8 +54,7 @@ export async function onRequest({request,env}:Ctx):Promise<Response>{
  const route=new URL(request.url).pathname.replace(/^\/api\/private\/?/,"").replace(/\/$/,"");
  if(route==="welcome"&&request.method==="GET"){
   const destination=new URL("/",request.url);
-  destination.searchParams.set("view","console");
-  destination.hash="account-access";
+  destination.hash="account";
   return Response.redirect(destination.toString(),303);
  }
  // Fail securely if Cloudflare Access/D1 are missing. Do not read global API credentials.
