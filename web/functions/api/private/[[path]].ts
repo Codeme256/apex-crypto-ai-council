@@ -49,6 +49,12 @@ async function verifiedQuote(req:Request,env:Env,symbol:string):Promise<{price:n
  return {price:quote.price,source:quote.source,timestamp:quote.timestamp};
 }
 export async function onRequest({request,env}:Ctx):Promise<Response>{
+ // Visiting the old login URL is a browser navigation, not an API call.
+ // Redirect to the real email form while keeping JSON API calls authenticated.
+ const initialPath=new URL(request.url).pathname.replace(/^\/api\/private\/?/,"").replace(/\/$/,"");
+ if(initialPath==="welcome"&&request.method==="GET"&&request.headers.get("accept")?.includes("text/html")){
+  return Response.redirect(new URL("/#account",request.url).toString(),302);
+ }
  // Fail securely if Cloudflare Access/D1 are missing. Do not read global API credentials.
  if(!env.APEX_USERS_DB)
   return respond({error:"User accounts are not fully configured on Cloudflare Pages"},503);
