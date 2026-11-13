@@ -161,3 +161,51 @@
 .cc-news-card time{font-size:10px;color:#839baa;margin-top:auto}
 @media(max-width:1050px){.cc-news-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:700px){.cc-news-grid{grid-template-columns:1fr}.cc-auth-panel{width:100%}}
+
+
+/* Persistent UI presence, NOT fabricated background model inference.
+   Only agents with actual returned API evidence receive the full animated halo. */
+.cc-arena.cc-always-live .cc-node.cc-agent-active .cc-node-icon{
+  animation:ccAgentHeartbeat 3s ease-in-out infinite;
+  box-shadow:0 0 0 0 rgba(55,219,235,.36),0 0 18px rgba(55,219,235,.15);
+}
+.cc-arena.cc-always-live .cc-node.cc-working.cc-agent-active .cc-node-icon{
+  animation:ccPulse 1.4s ease-in-out infinite;
+}
+.cc-arena.cc-always-live .cc-connections line.cc-link-live{
+  animation:ccSignalTravel 1.6s linear infinite;
+  stroke-linecap:round;
+  filter:drop-shadow(0 0 2px rgba(80,240,249,.65));
+}
+.cc-arena.cc-visual-paused .cc-connections line{
+  animation:none;
+}
+.cc-arena.cc-always-live .cc-node.cc-agent-active .cc-assessment{
+  border-color:#35768b;
+  box-shadow:0 0 8px rgba(54,205,234,.14);
+}
+.cc-arena.cc-always-live .cc-node.cc-veto.cc-agent-active .cc-node-icon{
+  border-color:#ff849b;
+  animation:ccVetoHeartbeat 3.3s ease-in-out infinite;
+}
+.cc-arena.cc-always-live .cc-node.cc-offline .cc-node-icon{
+  animation:none;
+  box-shadow:none;
+}
+@keyframes ccSignalTravel{
+  to{stroke-dashoffset:-24}
+}
+@keyframes ccAgentHeartbeat{
+  0%,100%{transform:scale(1);box-shadow:0 0 8px rgba(55,219,235,.18),0 0 0 0 rgba(55,219,235,.23)}
+  50%{transform:scale(1.075);box-shadow:0 0 19px rgba(55,219,235,.52),0 0 0 9px rgba(55,219,235,0)}
+}
+@keyframes ccVetoHeartbeat{
+  0%,100%{transform:scale(1);box-shadow:0 0 6px rgba(255,132,155,.15)}
+  50%{transform:scale(1.06);box-shadow:0 0 19px rgba(255,132,155,.55)}
+}
+@media(prefers-reduced-motion:reduce){
+  .cc-arena.cc-always-live .cc-node.cc-agent-active .cc-node-icon,
+  .cc-arena.cc-always-live .cc-node.cc-working.cc-agent-active .cc-node-icon,
+  .cc-arena.cc-always-live .cc-node.cc-veto.cc-agent-active .cc-node-icon,
+  .cc-arena.cc-always-live .cc-connections line.cc-link-live{animation:none!important}
+}
