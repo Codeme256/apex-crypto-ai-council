@@ -57,7 +57,7 @@ export interface LiveSpotAccount {environment:"BINANCE_SPOT_PRODUCTION";liveFund
 export const api = {
   health: () => req<Health>("/health"),
   news: (symbol:string) => req<NewsResponse>(`/news?symbol=${encodeURIComponent(symbol)}`),
-  council: (symbol:string,timeframe:string) => req<CouncilReport>(`/council?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`),
+  council: (symbol:string,timeframe:string,provider?:"binance") => req<CouncilReport>(`/council?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}${provider?"&provider="+provider:""}`),
   emailSignup:(email:string,password:string)=>req<{user:CouncilUser}>("/auth/register",{method:"POST",body:JSON.stringify({email,password})}),
   emailLogin:(email:string,password:string)=>req<{user:CouncilUser}>("/auth/login",{method:"POST",body:JSON.stringify({email,password})}),
   logout:()=>req<{ok:boolean}>("/auth/logout",{method:"POST",body:"{}"}),
@@ -83,6 +83,6 @@ export const api = {
     if(provider)q.set("provider",provider);
     return req<{ tickers: Array<{ symbol: string; price: number | null; ok: boolean; source?: string; timestamp?: number }> }>(`/ticker?${q.toString()}`);
   },
-  candles: (symbol: string, interval: string, limit = 300) => req<CandleResponse>(`/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`),
+  candles: (symbol: string, interval: string, limit = 300, provider?:"binance") => req<CandleResponse>(`/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}${provider?"&provider="+provider:""}`),
   backtest: (symbol: string) => req<unknown>("/backtest", { method: "POST", body: JSON.stringify({ symbol, candleLimit: 300 }) }),
 };
