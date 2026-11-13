@@ -62,6 +62,7 @@ function LiveCandles({candles}:{candles:Candle[]}) {
 
 export default function CommandCenter() {
   const [symbol,setSymbol]=useState<string>("BTCUSDT");
+  const [providerMode,setProviderMode]=useState<"auto"|"binance">("auto");
   const [period,setPeriod]=useState<string>("15m");
   const [candles,setCandles]=useState<Candle[]>([]);
   const [source,setSource]=useState("");
@@ -85,7 +86,7 @@ export default function CommandCenter() {
     // The Council evaluates exactly the candle source and timestamps it returns.
     // News independently fetches sourced articles and NEVER fabricates a directional score.
     const [assessment,status,headlines]=await Promise.allSettled([
-      api.council(symbol,period),api.health(),api.news(symbol)
+      api.council(symbol,period,providerMode==="binance"?"binance":undefined),api.health(),api.news(symbol)
     ]);
     if(version!==requestVersion.current)return;
     let result:CouncilReport|null=null;
@@ -103,7 +104,7 @@ export default function CommandCenter() {
     if(!market){
       // Allow a verified price chart when the Council is unavailable, but show
       // the Council as unavailable rather than pretending it analyzed these bars.
-      try{market=await api.candles(symbol,period,180)}
+      try{market=await api.candles(symbol,period,180,providerMode==="binance"?"binance":undefined)}
       catch(e){if(version===requestVersion.current)setMarketError(e instanceof Error?e.message:String(e))}
     }
     if(version!==requestVersion.current)return;
@@ -130,7 +131,7 @@ export default function CommandCenter() {
         "News provider result did not match the selected symbol");
     }
     setUpdating(false);
-  },[symbol,period]);
+  },[symbol,period,providerMode]);
   useEffect(()=>{
     if(!automatic)return;
     void refresh();
@@ -210,6 +211,10 @@ export default function CommandCenter() {
           <div className="cc-actions">
             <select value={symbol} aria-label="Trading pair" onChange={e=>setSymbol(e.target.value)}>{PAIRS.map(p=><option key={p} value={p}>{p}</option>)}</select>
             <select value={period} aria-label="Timeframe" onChange={e=>setPeriod(e.target.value)}>{PERIODS.map(p=><option key={p} value={p}>{p}</option>)}</select>
+            <select value={providerMode} aria-label="Exchange data source" onChange={e=>setProviderMode(e.target.value as "auto"|"binance")}>
+              <option value="auto">Verified exchanges</option>
+              <option value="binance">Binance Spot only</option>
+            </select>
             <button type="button" disabled={updating} onClick={()=>setVersion(v=>v+1)}>{updating?"Checking…":"Refresh"}</button>
             <button type="button" className="cc-ghost" onClick={()=>setAutomatic(a=>!a)}>{automatic?"Pause":"Resume"}</button>
           </div>
@@ -245,7 +250,7 @@ export default function CommandCenter() {
             <div className="cc-panel-head"><div><h2>Live Exchange Chart</h2><p>{symbol} · {period} · {source||"No verified source"}</p></div><span className={"cc-chip "+(feedVerified?"cc-good":"cc-warn")}>{feedVerified?"REAL CANDLES":"OFFLINE"}</span></div>
             <LiveCandles candles={candles}/>
             {marketError&&<div className="cc-error" role="alert">Market feed: {marketError}</div>}
-            <p className="cc-hint">Broker prices are labelled by source. Coinbase or Kraken fallback is not presented as Binance; no synthetic candles or prices are generated.</p>
+            <p className="cc-hint">Market mode: {providerMode==="binance"?"BINANCE ONLY: never use another provider. If Binance blocks this server, show no candles.":"VERIFIED EXCHANGES: clearly labelled Binance, Coinbase or Kraken data."} No synthetic candles or prices are generated.</p>
           </section>
           <section id="evidence" className="cc-panel">
             <div className="cc-panel-head"><div><h2>Agent Evidence Feed</h2><p>{council?"Verified rule-based reports":"Awaiting API"}</p></div></div>
