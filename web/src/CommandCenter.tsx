@@ -198,6 +198,7 @@ export default function CommandCenter() {
         <a className="cc-menu" href="#account">◫ <span>My Account</span></a>
         <a className="cc-menu" href="#binance-live">◈ <span>Real Binance Spot</span></a>
         <a className="cc-menu" href="#bybit-live">◈ <span>Real Bybit</span></a>
+        <a className="cc-menu" href="#automation">⚙ <span>Automatic Trading</span></a>
         <a className="cc-menu" href="#paper-desk">⇄ <span>Paper Trading</span></a>
         <a className="cc-menu" href="#trade-history">▣ <span>Trade History</span></a>
         <a className="cc-menu" href="#binance-testnet">⌘ <span>Binance Testnet</span></a>
