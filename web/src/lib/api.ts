@@ -52,6 +52,8 @@ export interface NewsResponse {symbol:string;retrievedAt:number;items:NewsArticl
 export interface CouncilUser {id:string;email:string}
 export interface PrivatePaperState {wallet:import("./paper-trading").PaperState;version:number|null;storage:string}
 export interface PersonalBinanceStatus {environment:string;connected:boolean;fingerprint:string|null;encryptionConfigured:boolean;ordersEnabled:false}
+export interface LiveSpotStatus {environment:"BINANCE_SPOT_PRODUCTION";connected:boolean;fingerprint:string|null;encryptionConfigured:boolean;readOnly:true;note?:string}
+export interface LiveSpotAccount {environment:"BINANCE_SPOT_PRODUCTION";liveFunds:true;readOnly:true;source:string;observedAt:number;accountType:string;balances:Array<{asset:string;free:string;locked:string}>}
 export const api = {
   health: () => req<Health>("/health"),
   news: (symbol:string) => req<NewsResponse>(`/news?symbol=${encodeURIComponent(symbol)}`),
@@ -63,6 +65,10 @@ export const api = {
   privatePaper:()=>req<PrivatePaperState>("/private/paper"),
   privatePaperOrder:(symbol:string,side:"BUY"|"SELL",amount:number)=>req<{wallet:import("./paper-trading").PaperState;exchangeOrder:false}>("/private/paper/orders",{method:"POST",body:JSON.stringify({symbol,side,amount})}),
   privatePaperKill:(enabled:boolean)=>req<{wallet:import("./paper-trading").PaperState}>("/private/paper/kill",{method:"POST",body:JSON.stringify({enabled})}),
+  liveSpotStatus:()=>req<LiveSpotStatus>("/private/spot/status"),
+  liveSpotAccount:()=>req<LiveSpotAccount>("/private/spot/account"),
+  saveLiveSpotKey:(apiKey:string,secret:string)=>req<{connected:true;readOnly:true}>("/private/spot/credentials",{method:"PUT",body:JSON.stringify({apiKey,secret})}),
+  disconnectLiveSpot:()=>req<{connected:false}>("/private/spot/credentials",{method:"DELETE",body:"{}"}),
   binanceStatus:()=>req<PersonalBinanceStatus>("/private/binance/status"),
   binanceAccount:()=>req<BinanceTestnetAccount>("/private/binance/account"),
   saveTestnetCredentials:(apiKey:string,secret:string)=>req<{connected:boolean;fingerprint:string}>("/private/binance/credentials",{method:"PUT",body:JSON.stringify({apiKey,secret})}),
