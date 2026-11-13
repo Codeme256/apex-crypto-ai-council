@@ -1,6 +1,7 @@
 import {useCallback,useEffect,useMemo,useState} from "react";
 import {api,type CouncilUser,type PersonalBinanceStatus,type BinanceTestnetAccount,type LiveSpotStatus,type LiveSpotAccount} from "./lib/api";
 import {initialPaper,paperEquity,TRADABLE,type PaperState} from "./lib/paper-trading";
+import BybitAccount from "./BybitAccount";
 
 type Quote={symbol:string;price:number|null;source?:string;timestamp?:number;ok:boolean};
 const fmt=(n:number|null|undefined)=>n==null||!Number.isFinite(n)?"—":n.toLocaleString(undefined,{maximumFractionDigits:6});
@@ -275,6 +276,8 @@ export default function AccountWorkspace({symbol}:{symbol:string}) {
      </>
     }
    </section>
+
+  <BybitAccount user={user}/>
 
   <section id="paper-desk" className="cc-panel cc-workspace">
    <div className="cc-panel-head"><div><h2>Paper Trading &amp; Portfolio</h2><p>Your existing server-side simulated Spot wallet, not a new second dashboard</p></div>
