@@ -1,5 +1,5 @@
 import {useCallback,useEffect,useMemo,useState} from "react";
-import {api,type CouncilUser,type PersonalBinanceStatus,type BinanceTestnetAccount} from "./lib/api";
+import {api,type CouncilUser,type PersonalBinanceStatus,type BinanceTestnetAccount,type LiveSpotStatus,type LiveSpotAccount} from "./lib/api";
 import {initialPaper,paperEquity,TRADABLE,type PaperState} from "./lib/paper-trading";
 
 type Quote={symbol:string;price:number|null;source?:string;timestamp?:number;ok:boolean};
@@ -29,6 +29,20 @@ export default function AccountWorkspace({symbol}:{symbol:string}) {
  const [secret,setSecret]=useState("");
  const [testnetBusy,setTestnetBusy]=useState(false);
  const [testnetMessage,setTestnetMessage]=useState("");
+ const [liveStatus,setLiveStatus]=useState<LiveSpotStatus|null>(null);
+ const [liveBalance,setLiveBalance]=useState<LiveSpotAccount|null>(null);
+ const [liveBusy,setLiveBusy]=useState(false);
+ const [liveError,setLiveError]=useState("");
+ const [liveKey,setLiveKey]=useState("");
+ const [liveSecret,setLiveSecret]=useState("");
+ const loadLive=useCallback(async()=>{
+  try{
+   const status=await api.liveSpotStatus();setLiveStatus(status);
+   if(status.connected){try{const balance=await api.liveSpotAccount();setLiveBalance(balance);setLiveError("")}
+    catch(e){setLiveBalance(null);setLiveError("Real balance verification failed: "+errorMessage(e))}}
+   else{setLiveBalance(null);setLiveError("")}
+  }catch(e){setLiveStatus(null);setLiveBalance(null);setLiveError("Production API unavailable: "+errorMessage(e))}
+ },[]);
 
  const loadSession=useCallback(async()=>{
   setSessionBusy(true);setSessionError("");
@@ -100,6 +114,26 @@ export default function AccountWorkspace({symbol}:{symbol:string}) {
   return()=>window.clearInterval(id);
  },[loadSession,loadQuotes]);
 
+ useEffect(()=>{
+  if(!user){setLiveStatus(null);setLiveBalance(null);return}
+  void loadLive();
+  const id=window.setInterval(()=>void loadLive(),60000);
+  return()=>window.clearInterval(id);
+ },[user?.id,loadLive]);
+ async function connectLive(){
+  if(!user||liveBusy||!liveKey||!liveSecret||!liveStatus?.encryptionConfigured)return;
+  setLiveBusy(true);setLiveError("");
+  try{await api.saveLiveSpotKey(liveKey,liveSecret);await loadLive()}
+  catch(e){setLiveBalance(null);setLiveError(errorMessage(e))}
+  finally{setLiveKey("");setLiveSecret("");setLiveBusy(false)}
+ }
+ async function disconnectLive(){
+  if(!user||!liveStatus?.connected||liveBusy)return;
+  setLiveBusy(true);setLiveError("");
+  try{await api.disconnectLiveSpot();await loadLive()}
+  catch(e){setLiveError(errorMessage(e))}
+  finally{setLiveBusy(false)}
+ }
  const prices=useMemo(()=>Object.fromEntries(quotes.filter(q=>q.ok&&q.price!=null&&q.price>0).map(q=>[q.symbol,q.price!])),[quotes]);
  const equity=wallet?paperEquity(wallet,prices):null;
  const quote=quotes.find(q=>q.symbol===symbol&&q.ok&&q.price!=null&&q.price>0);
@@ -199,6 +233,48 @@ export default function AccountWorkspace({symbol}:{symbol:string}) {
       {authFeedback&&<div className="cc-notice" role="status">{authFeedback}</div>}
     </div>}
   </section>
+
+  <section id="binance-live" className="cc-panel cc-workspace">
+    <div className="cc-panel-head"><div><h2>Real Binance Spot Account — Read Only</h2>
+      <p>Verified production balances, independent of simulated paper wallets and Testnet funds</p></div>
+      <span className={"cc-chip "+(liveBalance?"cc-good":"cc-warn")}>
+        {!user?"SIGN IN REQUIRED":liveBalance?"LIVE ACCOUNT VERIFIED":liveStatus?.connected?"CONNECTION UNAVAILABLE":"NOT CONNECTED"}
+      </span>
+    </div>
+    {!user?<p className="cc-muted">Sign in under My APEX Account before connecting a real Binance Spot read-only API key.</p>:
+     <>
+      <div className="cc-testnet-details">
+       <div><span>Environment</span><strong>BINANCE PRODUCTION SPOT</strong></div>
+       <div><span>Saved key</span><strong>{liveStatus?.connected?"Encrypted ••••"+(liveStatus.fingerprint??""):"Not connected"}</strong></div>
+       <div><span>Balances source</span><strong>{liveBalance?liveBalance.source:"Not verified"}</strong></div>
+       <div><span>Trading permission</span><strong className="cc-amber">READ ONLY · NO ORDERS</strong></div>
+      </div>
+      {liveError&&<div className="cc-error" role="alert">{liveError}</div>}
+      {!liveStatus?.connected&&<div className="cc-credentials">
+       <label>Binance production Spot Read Only API key
+        <input type="text" autoComplete="off" value={liveKey} onChange={e=>setLiveKey(e.target.value)} placeholder="Your Binance production read-only key"/>
+       </label>
+       <label>Binance production API secret
+        <input type="password" autoComplete="off" value={liveSecret} onChange={e=>setLiveSecret(e.target.value)} placeholder="Encrypted server-side after verification"/>
+       </label>
+       <button type="button" onClick={()=>void connectLive()} disabled={liveBusy||!liveKey||!liveSecret||!liveStatus?.encryptionConfigured}>
+        {liveBusy?"Verifying with Binance…":"Connect and verify actual Binance balances"}
+       </button>
+      </div>}
+      <div className="cc-workspace-actions">
+       <button type="button" disabled={liveBusy||!liveStatus?.connected} onClick={()=>void loadLive()}>Refresh real balances</button>
+       <button type="button" disabled={liveBusy||!liveStatus?.connected} onClick={()=>void disconnectLive()}>Disconnect real API</button>
+      </div>
+      {liveBalance?<div>
+       <p className="cc-hint">Actual Binance Spot funds · last verified {new Date(liveBalance.observedAt).toLocaleString()}. Non-zero assets only. No invented starting balance, estimated P&L or paper holdings included.</p>
+       <div className="cc-table-scroll"><table className="cc-data-table"><thead><tr><th>Asset</th><th>Available (real)</th><th>Locked (real)</th></tr></thead>
+        <tbody>{liveBalance.balances.length?liveBalance.balances.map(b=><tr key={b.asset}><td>{b.asset}</td><td>{b.free}</td><td>{b.locked}</td></tr>):
+         <tr><td colSpan={3}>Binance reports no non-zero Spot balances</td></tr>}</tbody></table></div>
+      </div>:<p className="cc-hint">Actual balances appear only after Binance authenticates your key. If Binance blocks Cloudflare (HTTP 403), no virtual values are substituted.</p>}
+      <p className="cc-hint">Use a separate Binance production API key with Read Only permissions only: disable trading, withdrawals and futures. These credentials never enter the Testnet panel or AI agents. This site cannot place orders on your real account.</p>
+     </>
+    }
+   </section>
 
   <section id="paper-desk" className="cc-panel cc-workspace">
    <div className="cc-panel-head"><div><h2>Paper Trading &amp; Portfolio</h2><p>Your existing server-side simulated Spot wallet, not a new second dashboard</p></div>
