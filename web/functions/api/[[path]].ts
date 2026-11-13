@@ -54,7 +54,7 @@ async function ticker(symbol: string,preferred: "binance"|"coinbase"|"kraken"|nu
   }
   return { symbol, price: null, ok: false, source: "Binance, Coinbase and Kraken unavailable", timestamp: Date.now() };
 }
-async function candlesFor(symbol: string, interval: string, limit: number, now: number): Promise<{ candles: Candle[]; source: string }> {
+async function candlesFor(symbol: string, interval: string, limit: number, now: number, binanceOnly=false): Promise<{ candles: Candle[]; source: string }> {
   try {
     const rows = await providerJson(`${BINANCE}/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`) as unknown[][];
     const candles = rows.map(row => ({
@@ -62,7 +62,9 @@ async function candlesFor(symbol: string, interval: string, limit: number, now: 
       low: Number(row[3]), close: Number(row[4]), volume: Number(row[5]), closed: Number(row[6]) < now,
     })).filter(c => Number.isFinite(c.time) && [c.open, c.high, c.low, c.close, c.volume].every(Number.isFinite));
     if (candles.length) return { candles, source: "Binance Spot REST" };
-  } catch { /* Try separately labelled public exchange candles. */ }
+  } catch { /* Official Binance public market data may be blocked on this Cloudflare edge. */ }
+  // A Binance-only request must NEVER silently substitute another exchange or invent candles.
+  if(binanceOnly)throw Error("Binance market feed unavailable on this server; no fallback was used");
   const granularity = INTERVALS.get(interval)!;
   const product = symbol.replace(/(USDT|USDC|USD)$/, "-$1");
   try {
@@ -138,14 +140,16 @@ export async function onRequest({ request, env }: PagesContext): Promise<Respons
     const symbol = (url.searchParams.get("symbol") || "").toUpperCase();
     const interval = url.searchParams.get("interval") || "15m";
     const limit = Number(url.searchParams.get("limit") || 200);
+    const requestedProvider=url.searchParams.get("provider");
+    if(requestedProvider&&requestedProvider!=="binance")return json({error:"Only Binance-only or default verified exchange mode supported"},400);
     if (!allowed.has(symbol)) return json({ error: "Symbol is not configured" }, 400);
     if (!INTERVALS.has(interval)) return json({ error: "Unsupported candle interval" }, 400);
     if (!Number.isInteger(limit) || limit < 1 || limit > 1000) return json({ error: "limit must be an integer from 1 to 1000" }, 400);
     try {
-      const result = await candlesFor(symbol, interval, limit, Date.now());
+      const result = await candlesFor(symbol, interval, limit, Date.now(),requestedProvider==="binance");
       return json({ symbol, interval, source: result.source, retrievedAt: Date.now(), candles: result.candles }, 200, "public, max-age=10, stale-while-revalidate=15");
     } catch {
-      return json({ error: "Market data is unavailable from configured public providers" }, 502);
+      return json({ error: requestedProvider==="binance"?"Binance Spot data unavailable; no fallback market data substituted":"Market data is unavailable from configured public providers" }, 502);
     }
   }
   return json({ error: "Route not found" }, 404);
