@@ -18,19 +18,52 @@ function exchangeFailure(code:number):Error {
  return Error("Binance account API unavailable (HTTP "+code+").");
 }
 
-async function spotAccount(apiKey:string,apiSecret:string):Promise<{balances:Balance[];accountType:string;observedAt:number;source:string}>{
+type Permissions={
+ enableReading?:boolean;
+ enableSpotAndMarginTrading?:boolean;
+ enableFutures?:boolean;
+ enableWithdrawals?:boolean;
+ enableInternalTransfer?:boolean;
+ enableMargin?:boolean;
+ permitsUniversalTransfer?:boolean;
+ enableVanillaOptions?:boolean;
+ enableFixApiTrade?:boolean;
+ enablePortfolioMarginTrading?:boolean;
+};
+async function signedGet<T>(apiKey:string,apiSecret:string,path:string):Promise<T>{
  const params=new URLSearchParams({recvWindow:"5000",timestamp:String(Date.now())});
  const query=params.toString();
  const imported=await crypto.subtle.importKey("raw",new TextEncoder().encode(apiSecret),
   {name:"HMAC",hash:"SHA-256"},false,["sign"]);
- const signature=new Uint8Array(await crypto.subtle.sign("HMAC",imported,new TextEncoder().encode(query)));
- const hash=Array.from(signature,n=>n.toString(16).padStart(2,"0")).join("");
- const url=BINANCE_ORIGIN+"/api/v3/account?"+query+"&signature="+hash;
- const r=await fetch(url,{method:"GET",redirect:"error",headers:{"X-MBX-APIKEY":apiKey,accept:"application/json"},signal:AbortSignal.timeout(10000),cache:"no-store"});
- if(!r.ok)throw exchangeFailure(r.status);
- if(!r.headers.get("content-type")?.toLowerCase().includes("application/json"))throw Error("Binance did not return JSON; account data not verified.");
- const data=await r.json() as {accountType?:unknown;balances?:unknown};
- if(!Array.isArray(data.balances)||typeof data.accountType!=="string")throw Error("Binance returned an invalid account response.");
+ const bytes=new Uint8Array(await crypto.subtle.sign("HMAC",imported,new TextEncoder().encode(query)));
+ const signature=Array.from(bytes,n=>n.toString(16).padStart(2,"0")).join("");
+ let response:Response;
+ try{
+  response=await fetch(BINANCE_ORIGIN+path+"?"+query+"&signature="+signature,{
+   method:"GET",redirect:"error",headers:{"X-MBX-APIKEY":apiKey,accept:"application/json"},
+   signal:AbortSignal.timeout(10000),cache:"no-store"
+  });
+ }catch{throw Error("Binance production API is unreachable from Cloudflare; no account data is available.");}
+ if(!response.ok)throw exchangeFailure(response.status);
+ if(!response.headers.get("content-type")?.toLowerCase().includes("application/json"))
+  throw Error("Binance did not return verified JSON account data.");
+ return response.json() as Promise<T>;
+}
+async function validateReadOnlyKey(apiKey:string,apiSecret:string):Promise<void>{
+ const flags=await signedGet<Permissions>(apiKey,apiSecret,"/sapi/v1/account/apiRestrictions");
+ const risky=[
+  "enableSpotAndMarginTrading","enableFutures","enableWithdrawals","enableInternalTransfer",
+  "enableMargin","permitsUniversalTransfer","enableVanillaOptions","enableFixApiTrade","enablePortfolioMarginTrading"
+ ] as const;
+ if(flags.enableReading!==true||risky.some(name=>flags[name]!==false))
+  throw Error("Binance key permissions are not verified READ-ONLY. Remove all trading, transfer and withdrawal privileges before connecting.");
+}
+async function spotAccount(apiKey:string,apiSecret:string):Promise<{balances:Balance[];accountType:string;observedAt:number;source:string}>{
+ // Recheck permissions on every balance read in case the owner changed them.
+ await validateReadOnlyKey(apiKey,apiSecret);
+ const data=await signedGet<{accountType?:unknown;balances?:unknown}>(apiKey,apiSecret,"/api/v3/account");
+ if(!Array.isArray(data.balances)||typeof data.accountType!=="string")
+  throw Error("Binance returned an invalid account response.");
  const balances:Balance[]=data.balances.filter((x:unknown)=>{
   if(typeof x!=="object"||x===null)return false;
   const v=x as Balance;

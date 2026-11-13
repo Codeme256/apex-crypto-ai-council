@@ -54,6 +54,9 @@ export interface PrivatePaperState {wallet:import("./paper-trading").PaperState;
 export interface PersonalBinanceStatus {environment:string;connected:boolean;fingerprint:string|null;encryptionConfigured:boolean;ordersEnabled:false}
 export interface LiveSpotStatus {environment:"BINANCE_SPOT_PRODUCTION";connected:boolean;fingerprint:string|null;encryptionConfigured:boolean;readOnly:true;note?:string}
 export interface LiveSpotAccount {environment:"BINANCE_SPOT_PRODUCTION";liveFunds:true;readOnly:true;source:string;observedAt:number;accountType:string;balances:Array<{asset:string;free:string;locked:string}>}
+export interface BybitLiveStatus {environment:"BYBIT_PRODUCTION";connected:boolean;fingerprint:string|null;encryptionConfigured:boolean;readOnly:true;ordersEnabled:false;note?:string}
+export interface BybitLiveAccount {environment:"BYBIT_PRODUCTION";liveFunds:true;readOnly:true;accountType:"UNIFIED";totalEquityUsd:string;totalWalletBalanceUsd:string;source:string;observedAt:number;balances:Array<{asset:string;walletBalance:string;equity:string;usdValue:string}>}
+export interface AutomationReadiness {state:"NOT_DEPLOYED";enabled:false;ordersEnabled:false;runnerOnline:false;markets:string[];exchanges:{BINANCE:{readOnlyKeyStored:boolean};BYBIT:{readOnlyKeyStored:boolean}};maxRiskPerTradePct:number;maxOrderNotionalPct:number;dailyLossLimitPct:number;weeklyLossLimitPct:number;maxTradesPerDay:number;stopAfterConsecutiveLosses:number;leverageCap:number;blockers:string[];note:string}
 export const api = {
   health: () => req<Health>("/health"),
   news: (symbol:string) => req<NewsResponse>(`/news?symbol=${encodeURIComponent(symbol)}`),
@@ -65,6 +68,11 @@ export const api = {
   privatePaper:()=>req<PrivatePaperState>("/private/paper"),
   privatePaperOrder:(symbol:string,side:"BUY"|"SELL",amount:number)=>req<{wallet:import("./paper-trading").PaperState;exchangeOrder:false}>("/private/paper/orders",{method:"POST",body:JSON.stringify({symbol,side,amount})}),
   privatePaperKill:(enabled:boolean)=>req<{wallet:import("./paper-trading").PaperState}>("/private/paper/kill",{method:"POST",body:JSON.stringify({enabled})}),
+  automationStatus:()=>req<AutomationReadiness>("/private/automation/status"),
+  bybitStatus:()=>req<BybitLiveStatus>("/private/bybit/status"),
+  bybitAccount:()=>req<BybitLiveAccount>("/private/bybit/account"),
+  saveBybitKey:(apiKey:string,secret:string)=>req<{connected:true;readOnly:true}>("/private/bybit/credentials",{method:"PUT",body:JSON.stringify({apiKey,secret})}),
+  disconnectBybit:()=>req<{connected:false}>("/private/bybit/credentials",{method:"DELETE",body:"{}"}),
   liveSpotStatus:()=>req<LiveSpotStatus>("/private/spot/status"),
   liveSpotAccount:()=>req<LiveSpotAccount>("/private/spot/account"),
   saveLiveSpotKey:(apiKey:string,secret:string)=>req<{connected:true;readOnly:true}>("/private/spot/credentials",{method:"PUT",body:JSON.stringify({apiKey,secret})}),

@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feat/continuous-agents-real-binance-account-20261113
+      - feat/bybit-binance-live-api-connect-20261113
   pull_request:
     paths:
       - 'web/**'
@@ -21,6 +22,9 @@ jobs:
       - name: Install frontend dependencies
         working-directory: web
         run: npm install --no-audit --no-fund
+      - name: Execute 2% execution-risk unit tests
+        working-directory: web
+        run: npx vitest run src/lib/execution-risk-2pct.test.ts
       - name: Typecheck and production build
         working-directory: web
         run: npm run build
