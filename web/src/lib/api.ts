@@ -77,9 +77,11 @@ export const api = {
   portfolio: () => req<Portfolio>("/portfolio"),
   scan: (body: { symbol: string; market?: string; timeframe?: string }) => req<ScanResult>("/scan", { method: "POST", body: JSON.stringify(body) }),
   councilTick: () => req<unknown>("/council/tick", { method: "POST", body: "{}" }),
-  ticker: (symbols?: string[]) => {
-    const q = symbols?.length ? `?symbols=${symbols.map(encodeURIComponent).join(",")}` : "";
-    return req<{ tickers: Array<{ symbol: string; price: number | null; ok: boolean; source?: string; timestamp?: number }> }>(`/ticker${q}`);
+  ticker: (symbols?: string[], provider?: "binance"|"coinbase"|"kraken") => {
+    const q = new URLSearchParams();
+    if(symbols?.length)q.set("symbols",symbols.join(","));
+    if(provider)q.set("provider",provider);
+    return req<{ tickers: Array<{ symbol: string; price: number | null; ok: boolean; source?: string; timestamp?: number }> }>(`/ticker?${q.toString()}`);
   },
   candles: (symbol: string, interval: string, limit = 300) => req<CandleResponse>(`/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`),
   backtest: (symbol: string) => req<unknown>("/backtest", { method: "POST", body: JSON.stringify({ symbol, candleLimit: 300 }) }),
