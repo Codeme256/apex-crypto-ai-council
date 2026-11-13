@@ -30,13 +30,13 @@ async function cipherKey(env:Env){
  return crypto.subtle.importKey("raw",raw.buffer as ArrayBuffer,{name:"AES-GCM"},false,["encrypt","decrypt"]);
 }
 export async function cryptoReady(env:Env){return Boolean(await cipherKey(env));}
-export async function encrypt(env:Env,userId:string,plaintext:string):Promise<string>{
+export async function encrypt(env:Env,userId:string,plaintext:string,scope:"testnet"|"live-spot"="testnet"):Promise<string>{
  const key=await cipherKey(env);if(!key)throw Error("Credential encryption is not configured");
  const iv=crypto.getRandomValues(new Uint8Array(12));
- const ciphertext=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv:iv.buffer as ArrayBuffer,additionalData:encoder.encode("apex-testnet:"+userId)},key,encoder.encode(plaintext)));
+ const ciphertext=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv:iv.buffer as ArrayBuffer,additionalData:encoder.encode("apex-"+scope+":"+userId)},key,encoder.encode(plaintext)));
  return "v1:"+bytesToB64(iv)+":"+bytesToB64(ciphertext);
 }
-export async function decrypt(env:Env,userId:string,ciphertext:string):Promise<string>{
+export async function decrypt(env:Env,userId:string,ciphertext:string,scope:"testnet"|"live-spot"="testnet"):Promise<string>{
  const key=await cipherKey(env);if(!key)throw Error("Credential encryption is not configured");
  const [version,nonce,data]=ciphertext.split(":");if(version!=="v1"||!nonce||!data)throw Error("Unknown encryption record");
  const iv=b64ToBytes(nonce),bytes=b64ToBytes(data);

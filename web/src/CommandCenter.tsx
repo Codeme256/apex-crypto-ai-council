@@ -62,6 +62,7 @@ function LiveCandles({candles}:{candles:Candle[]}) {
 
 export default function CommandCenter() {
   const [symbol,setSymbol]=useState<string>("BTCUSDT");
+  const [providerMode,setProviderMode]=useState<"auto"|"binance">("auto");
   const [period,setPeriod]=useState<string>("15m");
   const [candles,setCandles]=useState<Candle[]>([]);
   const [source,setSource]=useState("");
@@ -73,6 +74,7 @@ export default function CommandCenter() {
   const [marketError,setMarketError]=useState("");
   const [councilError,setCouncilError]=useState("");
   const [updating,setUpdating]=useState(false);
+  const [lastQuote,setLastQuote]=useState<{price:number;timestamp:number;source:string}|null>(null);
   const [automatic,setAutomatic]=useState(true);
   const [version,setVersion]=useState(0);
   const requestVersion=useRef(0);
@@ -84,7 +86,7 @@ export default function CommandCenter() {
     // The Council evaluates exactly the candle source and timestamps it returns.
     // News independently fetches sourced articles and NEVER fabricates a directional score.
     const [assessment,status,headlines]=await Promise.allSettled([
-      api.council(symbol,period),api.health(),api.news(symbol)
+      api.council(symbol,period,providerMode==="binance"?"binance":undefined),api.health(),api.news(symbol)
     ]);
     if(version!==requestVersion.current)return;
     let result:CouncilReport|null=null;
@@ -102,7 +104,7 @@ export default function CommandCenter() {
     if(!market){
       // Allow a verified price chart when the Council is unavailable, but show
       // the Council as unavailable rather than pretending it analyzed these bars.
-      try{market=await api.candles(symbol,period,180)}
+      try{market=await api.candles(symbol,period,180,providerMode==="binance"?"binance":undefined)}
       catch(e){if(version===requestVersion.current)setMarketError(e instanceof Error?e.message:String(e))}
     }
     if(version!==requestVersion.current)return;
@@ -129,7 +131,7 @@ export default function CommandCenter() {
         "News provider result did not match the selected symbol");
     }
     setUpdating(false);
-  },[symbol,period]);
+  },[symbol,period,providerMode]);
   useEffect(()=>{
     if(!automatic)return;
     void refresh();
@@ -137,15 +139,41 @@ export default function CommandCenter() {
     return()=>{window.clearInterval(timer);requestVersion.current++};
   },[refresh,automatic,version]);
 
+  useEffect(()=>{
+    setLastQuote(null);
+    if(!automatic||!source)return;
+    const provider=source.startsWith("Binance")?"binance":source.startsWith("Coinbase")?"coinbase":source.startsWith("Kraken")?"kraken":null;
+    if(!provider)return;
+    let stopped=false;
+    const poll=async()=>{
+      try{
+        const result=await api.ticker([symbol],provider);
+        const price=result.tickers[0];
+        if(stopped)return;
+        if(price?.ok&&price.price!==null&&Number.isFinite(price.price)&&price.price>0&&
+           price.timestamp&&Date.now()-price.timestamp<45_000&&
+           price.source===source){
+          setLastQuote({price:price.price,source:price.source,timestamp:price.timestamp});
+        }else setLastQuote(null);
+      }catch{if(!stopped)setLastQuote(null)}
+    };
+    void poll();
+    const timer=window.setInterval(()=>void poll(),10000);
+    return()=>{stopped=true;window.clearInterval(timer)};
+  },[automatic,symbol,source]);
   const last=candles.at(-1);
   const first=candles[0];
   const percentage=last&&first?((last.close-first.open)/first.open)*100:null;
   const byId=Object.fromEntries((council?.agents??[]).map(a=>[a.id,a])) as Record<string,CouncilReport["agents"][number]|undefined>;
   const feedVerified=Boolean(last&&source&&marketAt&&Date.now()-marketAt<120_000);
+  const quote=lastQuote&&Date.now()-lastQuote.timestamp<45_000?lastQuote:
+    council?.quote&&Date.now()-council.quote.timestamp<45_000&&council.quote.source===source?
+      council.quote:null;
+  const hasEvidence=(id:AgentId)=>id==="NEWS"?Boolean(news?.items.length):Boolean(byId[id]);
   const agentState=(id:AgentId)=>{
     if(id==="NEWS")return updating?"FETCHING":news?.items.length?"SOURCES VERIFIED":newsError?"UNAVAILABLE":"NO FRESH NEWS";
     if(updating)return AGENTS.find(a=>a.id===id)?.work??"CHECKING";
-    if(byId[id])return byId[id]?.state==="BLOCKED"?"VETO":"REPORTED";
+    if(byId[id])return !automatic?"PAUSED":byId[id]?.state==="BLOCKED"?"RISK WATCH":"MONITORING";
     return councilError?"UNAVAILABLE":"WAITING";
   };
   return <div className="cc-app">
@@ -168,6 +196,7 @@ export default function CommandCenter() {
         <a className="cc-menu" href="#risk">⛨ <span>Risk Control</span></a>
         <p className="cc-menu-label">My workspace</p>
         <a className="cc-menu" href="#account">◫ <span>My Account</span></a>
+        <a className="cc-menu" href="#binance-live">◈ <span>Real Binance Spot</span></a>
         <a className="cc-menu" href="#paper-desk">⇄ <span>Paper Trading</span></a>
         <a className="cc-menu" href="#trade-history">▣ <span>Trade History</span></a>
         <a className="cc-menu" href="#binance-testnet">⌘ <span>Binance Testnet</span></a>
@@ -177,32 +206,36 @@ export default function CommandCenter() {
         <section id="overview" className="cc-intro">
           <div><div className="cc-eyebrow">VERIFIED EXCHANGE DATA · AUTOMATED EVIDENCE REVIEWS</div>
             <h1>AI Trading War Room</h1>
-            <p>Watch the Council evaluate real market data. Agent activity reflects API requests; all findings are advisory, not live orders.</p>
+            <p>The live-data flow animates continuously while connected. Exchange quotes refresh every 10 seconds; independent agent reports and publisher news refresh every 60 seconds. No simulated work or profit is shown.</p>
           </div>
           <div className="cc-actions">
             <select value={symbol} aria-label="Trading pair" onChange={e=>setSymbol(e.target.value)}>{PAIRS.map(p=><option key={p} value={p}>{p}</option>)}</select>
             <select value={period} aria-label="Timeframe" onChange={e=>setPeriod(e.target.value)}>{PERIODS.map(p=><option key={p} value={p}>{p}</option>)}</select>
+            <select value={providerMode} aria-label="Exchange data source" onChange={e=>setProviderMode(e.target.value as "auto"|"binance")}>
+              <option value="auto">Verified exchanges</option>
+              <option value="binance">Binance Spot only</option>
+            </select>
             <button type="button" disabled={updating} onClick={()=>setVersion(v=>v+1)}>{updating?"Checking…":"Refresh"}</button>
             <button type="button" className="cc-ghost" onClick={()=>setAutomatic(a=>!a)}>{automatic?"Pause":"Resume"}</button>
           </div>
         </section>
         <div className="cc-stat-grid">
           <article className="cc-stat"><span>Selected market</span><strong>{symbol.replace("USDT","/USDT")}</strong><small>{source||"Provider unavailable"}</small></article>
-          <article className="cc-stat"><span>Latest source quote</span><strong>{format(council?.quote?.price)}</strong><small>{council?.quote?(Date.now()-council.quote.timestamp>90000?"STALE · ":"")+council.quote.source+" · "+clock(council.quote.timestamp):"Quote unavailable"} · last candle {format(last?.close)}</small></article>
+          <article className="cc-stat"><span>Real exchange quote</span><strong>{format(quote?.price)}</strong><small>{quote?quote.source+" · "+clock(quote.timestamp):"No fresh source-matched quote"} · last candle {format(last?.close)}</small></article>
           <article className="cc-stat"><span>Council verdict</span><strong className={council?.verdict==="WATCH"?"cc-lime":"cc-amber"}>{council?.verdict??"UNAVAILABLE"}</strong><small>{council?.bias??"No verified assessment"} · no trades</small></article>
           <article className="cc-stat"><span>API status</span><strong>{health?.overall??"UNAVAILABLE"}</strong><small>{health?.modeDefault??"NO DATA"} · last update {clock(marketAt)}</small></article>
         </div>
 
         <section id="arena" className="cc-panel cc-arena-panel">
-          <div className="cc-panel-head"><div><h2>AI Council Arena</h2><p>Animating actual API requests and displaying returned evidence.</p></div><span className="cc-chip">{updating?"REQUESTS IN PROGRESS":council?"REPORTS RECEIVED":"NO COUNCIL DATA"}</span></div>
-          <div className="cc-arena">
+          <div className="cc-panel-head"><div><h2>AI Council Arena</h2><p>Continuous visual signal flow for connected data sources; genuine evidence reports update every minute.</p></div><span className="cc-chip">{!automatic?"UPDATES PAUSED":updating?"ANALYSIS REQUEST RUNNING":council?"MONITORING · LAST REPORT RECEIVED":"NO VERIFIED AGENT DATA"}</span></div>
+          <div className={"cc-arena "+(automatic?"cc-always-live":"cc-visual-paused")}>
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="cc-connections" aria-hidden="true">
-              {LINKS.map(([a,b])=><line key={a+b} x1={COORDS[a].x} y1={COORDS[a].y} x2={COORDS[b].x} y2={COORDS[b].y} strokeWidth={updating&&a!=="NEWS"&&b!=="NEWS"?0.5:0.2} stroke={updating&&a!=="NEWS"&&b!=="NEWS"?"#41dbe9":"#284356"} strokeDasharray={updating?"1.2 1.2":undefined}/>)}
+              {LINKS.map(([a,b])=>{const linked=automatic&&hasEvidence(a)&&hasEvidence(b);return <line key={a+b} className={linked?"cc-link-live":"cc-link-idle"} x1={COORDS[a].x} y1={COORDS[a].y} x2={COORDS[b].x} y2={COORDS[b].y} strokeWidth={linked?0.5:0.2} stroke={linked?"#41dbe9":"#284356"} strokeDasharray={linked?"1.2 1.2":undefined}/>})}
             </svg>
             {AGENTS.map(a=>{
               const found=byId[a.id];
-              const working=updating;
-              return <div className={"cc-node "+(working?"cc-working ":"")+(found?.assessment==="VETO"?"cc-veto ":"")+(a.id==="NEWS"&&!news?.items.length?"cc-offline":"")} key={a.id} style={{left:a.x+"%",top:a.y+"%"}}>
+              const working=updating&&hasEvidence(a.id);
+              return <div className={"cc-node "+(working?"cc-working ":"")+(automatic&&hasEvidence(a.id)?"cc-agent-active ":"")+(found?.assessment==="VETO"?"cc-veto ":"")+(!hasEvidence(a.id)?"cc-offline":"")} key={a.id} style={{left:a.x+"%",top:a.y+"%"}}>
                 <div className="cc-node-icon">{a.initial}</div>
                 <b>{a.name}</b>
                 <small>{agentState(a.id)}</small>
@@ -210,14 +243,14 @@ export default function CommandCenter() {
               </div>;
             })}
           </div>
-          <p className="cc-hint">Six technical agents analyze the same exchange candle snapshot displayed on this chart. News separately reports source-linked headlines, not a directional trading signal.</p>
+          <p className="cc-hint">The pulsing rings and moving connections are a continuous visual indicator of an available data source—not proof that an AI model is reasoning every second. Six technical agents review one verified market snapshot. News displays publisher headlines only.</p>
         </section>
         <div className="cc-lower">
           <section id="market" className="cc-panel">
             <div className="cc-panel-head"><div><h2>Live Exchange Chart</h2><p>{symbol} · {period} · {source||"No verified source"}</p></div><span className={"cc-chip "+(feedVerified?"cc-good":"cc-warn")}>{feedVerified?"REAL CANDLES":"OFFLINE"}</span></div>
             <LiveCandles candles={candles}/>
             {marketError&&<div className="cc-error" role="alert">Market feed: {marketError}</div>}
-            <p className="cc-hint">Broker prices are labelled by source. Coinbase or Kraken fallback is not presented as Binance; no synthetic candles or prices are generated.</p>
+            <p className="cc-hint">Market mode: {providerMode==="binance"?"BINANCE ONLY: never use another provider. If Binance blocks this server, show no candles.":"VERIFIED EXCHANGES: clearly labelled Binance, Coinbase or Kraken data."} No synthetic candles or prices are generated.</p>
           </section>
           <section id="evidence" className="cc-panel">
             <div className="cc-panel-head"><div><h2>Agent Evidence Feed</h2><p>{council?"Verified rule-based reports":"Awaiting API"}</p></div></div>

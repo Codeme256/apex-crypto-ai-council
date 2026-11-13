@@ -12,6 +12,9 @@ export async function onRequest({request,env}:Context):Promise<Response>{
  try{
   const candleUrl=new URL("/api/klines",url.origin);
   candleUrl.searchParams.set("symbol",symbol);candleUrl.searchParams.set("interval",timeframe);candleUrl.searchParams.set("limit","125");
+  const requestedProvider=url.searchParams.get("provider");
+  if(requestedProvider&&requestedProvider!=="binance")return json({error:"Unsupported market provider"},400);
+  if(requestedProvider)candleUrl.searchParams.set("provider",requestedProvider);
   const quoteUrl=new URL("/api/ticker",url.origin);quoteUrl.searchParams.set("symbols",symbol);
   const candleResponse=await marketApi({request:new Request(candleUrl.toString()),env});
   if(!candleResponse.ok)return json({error:"Market candles unavailable; agents cannot analyze without source evidence",upstream:{candles:candleResponse.status}},503);

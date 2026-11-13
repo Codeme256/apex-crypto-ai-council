@@ -52,10 +52,12 @@ export interface NewsResponse {symbol:string;retrievedAt:number;items:NewsArticl
 export interface CouncilUser {id:string;email:string}
 export interface PrivatePaperState {wallet:import("./paper-trading").PaperState;version:number|null;storage:string}
 export interface PersonalBinanceStatus {environment:string;connected:boolean;fingerprint:string|null;encryptionConfigured:boolean;ordersEnabled:false}
+export interface LiveSpotStatus {environment:"BINANCE_SPOT_PRODUCTION";connected:boolean;fingerprint:string|null;encryptionConfigured:boolean;readOnly:true;note?:string}
+export interface LiveSpotAccount {environment:"BINANCE_SPOT_PRODUCTION";liveFunds:true;readOnly:true;source:string;observedAt:number;accountType:string;balances:Array<{asset:string;free:string;locked:string}>}
 export const api = {
   health: () => req<Health>("/health"),
   news: (symbol:string) => req<NewsResponse>(`/news?symbol=${encodeURIComponent(symbol)}`),
-  council: (symbol:string,timeframe:string) => req<CouncilReport>(`/council?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`),
+  council: (symbol:string,timeframe:string,provider?:"binance") => req<CouncilReport>(`/council?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}${provider?"&provider="+provider:""}`),
   emailSignup:(email:string,password:string)=>req<{user:CouncilUser}>("/auth/register",{method:"POST",body:JSON.stringify({email,password})}),
   emailLogin:(email:string,password:string)=>req<{user:CouncilUser}>("/auth/login",{method:"POST",body:JSON.stringify({email,password})}),
   logout:()=>req<{ok:boolean}>("/auth/logout",{method:"POST",body:"{}"}),
@@ -63,6 +65,10 @@ export const api = {
   privatePaper:()=>req<PrivatePaperState>("/private/paper"),
   privatePaperOrder:(symbol:string,side:"BUY"|"SELL",amount:number)=>req<{wallet:import("./paper-trading").PaperState;exchangeOrder:false}>("/private/paper/orders",{method:"POST",body:JSON.stringify({symbol,side,amount})}),
   privatePaperKill:(enabled:boolean)=>req<{wallet:import("./paper-trading").PaperState}>("/private/paper/kill",{method:"POST",body:JSON.stringify({enabled})}),
+  liveSpotStatus:()=>req<LiveSpotStatus>("/private/spot/status"),
+  liveSpotAccount:()=>req<LiveSpotAccount>("/private/spot/account"),
+  saveLiveSpotKey:(apiKey:string,secret:string)=>req<{connected:true;readOnly:true}>("/private/spot/credentials",{method:"PUT",body:JSON.stringify({apiKey,secret})}),
+  disconnectLiveSpot:()=>req<{connected:false}>("/private/spot/credentials",{method:"DELETE",body:"{}"}),
   binanceStatus:()=>req<PersonalBinanceStatus>("/private/binance/status"),
   binanceAccount:()=>req<BinanceTestnetAccount>("/private/binance/account"),
   saveTestnetCredentials:(apiKey:string,secret:string)=>req<{connected:boolean;fingerprint:string}>("/private/binance/credentials",{method:"PUT",body:JSON.stringify({apiKey,secret})}),
@@ -71,10 +77,12 @@ export const api = {
   portfolio: () => req<Portfolio>("/portfolio"),
   scan: (body: { symbol: string; market?: string; timeframe?: string }) => req<ScanResult>("/scan", { method: "POST", body: JSON.stringify(body) }),
   councilTick: () => req<unknown>("/council/tick", { method: "POST", body: "{}" }),
-  ticker: (symbols?: string[]) => {
-    const q = symbols?.length ? `?symbols=${symbols.map(encodeURIComponent).join(",")}` : "";
-    return req<{ tickers: Array<{ symbol: string; price: number | null; ok: boolean; source?: string; timestamp?: number }> }>(`/ticker${q}`);
+  ticker: (symbols?: string[], provider?: "binance"|"coinbase"|"kraken") => {
+    const q = new URLSearchParams();
+    if(symbols?.length)q.set("symbols",symbols.join(","));
+    if(provider)q.set("provider",provider);
+    return req<{ tickers: Array<{ symbol: string; price: number | null; ok: boolean; source?: string; timestamp?: number }> }>(`/ticker?${q.toString()}`);
   },
-  candles: (symbol: string, interval: string, limit = 300) => req<CandleResponse>(`/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}`),
+  candles: (symbol: string, interval: string, limit = 300, provider?:"binance") => req<CandleResponse>(`/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${limit}${provider?"&provider="+provider:""}`),
   backtest: (symbol: string) => req<unknown>("/backtest", { method: "POST", body: JSON.stringify({ symbol, candleLimit: 300 }) }),
 };
