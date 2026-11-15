@@ -1,0 +1,14 @@
+.apex-mt5-launcher{scroll-margin-top:96px}
+.apex-mt5-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
+.apex-mt5-control,.apex-mt5-guidance{border:1px solid #294358;background:#0b1826;border-radius:14px;padding:18px;min-width:0}
+.apex-mt5-control label{display:block;color:#bdd1e2;font-weight:700;font-size:.87rem;margin-bottom:9px}
+.apex-mt5-control select{width:100%;min-height:46px;border:1px solid #3f6176;border-radius:10px;background:#0d2131;color:#e9f5ff;padding:10px;font:inherit}
+.apex-mt5-control select:focus-visible,.apex-mt5-open:focus-visible{outline:2px solid #50e0e6;outline-offset:3px}
+.apex-mt5-control .cc-hint{margin:12px 0}
+.apex-mt5-open{display:inline-block;border-radius:10px;padding:12px 16px;background:#16b8c5;color:#06151d;text-decoration:none;font-weight:800}
+.apex-mt5-open:hover{background:#48d5e0}
+.apex-mt5-domain{font-size:.8rem;color:#a6bacb;margin:12px 0 0;overflow-wrap:anywhere}
+.apex-mt5-guidance strong{color:#eaf5ff}
+.apex-mt5-guidance p{color:#b4c6d4;line-height:1.6;margin:8px 0}
+.apex-mt5-guidance .apex-mt5-note{border-left:3px solid #3b8da4;padding-left:12px;color:#aab9c6}
+@media(max-width:760px){.apex-mt5-layout{grid-template-columns:1fr}.apex-mt5-control,.apex-mt5-guidance{padding:14px}.apex-mt5-open{display:block;text-align:center}}

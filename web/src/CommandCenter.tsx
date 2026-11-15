@@ -3,6 +3,7 @@ import { createChart, CrosshairMode, type IChartApi, type ISeriesApi, type Candl
 import { api, type CandleResponse, type Candle, type CouncilReport, type Health, type NewsResponse } from "./lib/api";
 import "./styles/command-center.css";
 import AccountWorkspace from "./AccountWorkspace";
+import MT5WebLauncher from "./MT5WebLauncher";
 
 const PAIRS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "DOGEUSDT", "SHIBUSDT", "PEPEUSDT", "BONKUSDT", "FLOKIUSDT"] as const;
 const PERIODS = ["1m", "5m", "15m", "1h", "4h"] as const;
@@ -196,6 +197,7 @@ export default function CommandCenter() {
         <a className="cc-menu" href="#risk">⛨ <span>Risk Control</span></a>
         <p className="cc-menu-label">My workspace</p>
         <a className="cc-menu" href="#account">◫ <span>My Account</span></a>
+        <a className="cc-menu" href="#mt5-web-terminal">↗ <span>MT5 Web Terminal</span></a>
         <a className="cc-menu" href="#binance-live">◈ <span>Real Binance Spot</span></a>
         <a className="cc-menu" href="#bybit-live">◈ <span>Real Bybit</span></a>
         <a className="cc-menu" href="#automation">⚙ <span>Automatic Trading</span></a>
@@ -294,6 +296,7 @@ export default function CommandCenter() {
           <p className="cc-hint">Risk engine reports no execution authorization. Paper balances and orders are available only within your verified personal workspace.</p>
           {council?.blockers?.length?<div className="cc-blockers"><strong>Council risk warnings</strong><ul>{council.blockers.map((b,i)=><li key={i}>{b}</li>)}</ul></div>:null}
         </section>
+        <MT5WebLauncher/>
         <AccountWorkspace symbol={symbol}/>
         <footer className="cc-footer">One APEX AI Council dashboard · verified market evidence · individual paper wallets · no live-money execution</footer>
       </main>
