@@ -28,3 +28,20 @@ Exact oracle stream, market resolution and reconnect reconciliation,
 calibration and evaluation, xAI rationale, Demo fills and settlement, owner
 authentication, and eligible Live signing and reconciliation. Live is
 disarmed and the Worker exposes only a read-only API.
+
+## Hosted research preview
+
+The isolated Cloudflare Worker uses a one-minute cron trigger and the D1
+journal. The journal keeps up to 30 days of sampled quotes and decisions.
+The production schema was bootstrapped using migrations 0001 and 0002 through
+the D1 query endpoint. Use Wrangler migrations when creating a fresh database.
+
+For a standard deployment, run `npm run build` and `wrangler deploy` using an
+authorized account. The current preview uses a module-bundled fallback because
+the direct assets upload endpoint timed out. To reproduce it, run a Wrangler
+deployment dry run with an output directory, upload the compiled Worker as
+`desk.js`, and use `deploy/bundled-worker.js` as `index.js`. Generate
+`assets.js` with `node deploy/package-assets.js dist assets.js`. Bind D1 as
+`JOURNAL` and set the one-minute schedule. Roll back by restoring the previous
+Worker deployment version. The migrations are additive and survive a Worker
+rollback.

@@ -31,8 +31,12 @@ export default {
     try { desk = await snapshot() } catch { /* Persist the unsuccessful run. */ }
     const key = Math.floor(event.scheduledTime / 60_000)
     await env.JOURNAL.prepare(
-      'INSERT OR IGNORE INTO decisions (run_key, observed_at, market_slug, decision) VALUES (?, ?, ?, ?)'
+      'INSERT OR IGNORE INTO decisions (run_key, observed_at, market_slug, decision, snapshot_json) VALUES (?, ?, ?, ?, ?)'
     ).bind(key, desk?.observedAt ?? Date.now(), desk?.market.slug ?? null,
-      desk?.skipped ?? 'Market snapshot unavailable').run()
+      desk?.skipped ?? 'Market snapshot unavailable', desk ? JSON.stringify(desk) : null).run()
+    if (key % 60 === 0) {
+      await env.JOURNAL.prepare('DELETE FROM decisions WHERE run_key < ?')
+        .bind(key - 30 * 24 * 60).run()
+    }
   },
 }

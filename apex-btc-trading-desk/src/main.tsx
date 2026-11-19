@@ -43,7 +43,7 @@ function App() {
 
   return <main>
     <header><div><span className="brand">APEX / RESEARCH</span><h1>BTC Trading Desk</h1></div>
-      <span className="badge">DEMO · LIVE DISARMED</span></header>
+      <span className="badge">RESEARCH · LIVE DISARMED</span></header>
     <div className="grid">
       <section className="panel">
         <div className="section-heading"><h2>BTC Up / Down</h2><span className="badge">{marketStatus}</span></div>
@@ -69,13 +69,21 @@ function App() {
       {roles.map(([name, purpose], i) => <div className="agent" key={name}><h3>{name}</h3><p>{purpose}</p>
         <small>{i === 0 && freshBooks.length === 2 ? 'Quotes observed' : 'Blocked'}</small></div>)}
     </div></section>
+    <section className="panel"><h2>Trading readiness</h2>
+      <ul>
+        <li>Exact BTC settlement feed and price chart pending authentication and verification.</li>
+        <li>Probability model pending walk-forward calibration against resolved market data.</li>
+        <li>Grok analysis, Demo fills and settlement pending integration.</li>
+        <li>Live execution disarmed. Owner onboarding and venue preflight are required.</li>
+      </ul>
+    </section>
     <div className="grid">
       <section className="panel"><h2>Demo portfolio</h2><div className="amount">$1,000.00</div>
         <p>Starting balance · zero trades · zero positions</p></section>
       <section className="panel"><h2>Decision journal</h2>
         <p aria-live="polite">{desk?.skipped ?? (error || 'Waiting for snapshot')}</p>
         <p>{desk?.lastRun ? formatTime(desk.lastRun.observed_at, 'UTC') + ' UTC · ' + desk.lastRun.decision :
-          desk?.journalEnabled ? 'Waiting for first scheduled decision' : 'Scheduled journal pending D1 setup'}</p>
+          desk?.journalEnabled ? 'Waiting for first scheduled decision' : 'Scheduled journal unavailable'}</p>
       </section>
     </div>
   </main>

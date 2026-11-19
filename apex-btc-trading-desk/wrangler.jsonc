@@ -5,6 +5,20 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": [
+      "/api/*"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "JOURNAL",
+      "database_name": "apex-btc-trading-desk-journal",
+      "database_id": "0b84403f-695a-424a-b9a0-a6b916e446d5"
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "* * * * *"
+    ]
   }
 }

@@ -1,6 +1,6 @@
 type Outcome = 'Up' | 'Down'
 type Level = { price: string; size: string }
-export type Book = { token: string; outcome: Outcome; timestamp: number; bids: Level[]; asks: Level[] }
+export type Book = { token: string; outcome: Outcome; timestamp: number; tickSize: string | null; minOrderSize: string | null; bids: Level[]; asks: Level[] }
 export type Market = {
   slug: string; condition: string; end: number; start: number; question: string
   rules: string; reference: string | null; open: boolean; tokens: Record<Outcome, string>
@@ -67,7 +67,9 @@ export function parseBook(value: unknown, market: Market, outcome: Outcome, now:
     return { price, size }
   }).sort((a, b) => direction * (Number(a.price) - Number(b.price))).slice(0, 5)
 
-  return { token, outcome, timestamp, bids: levels(entry.bids, -1), asks: levels(entry.asks, 1) }
+  const decimal = (input: unknown) => typeof input === 'string' && /^\d+(\.\d+)?$/.test(input) ? input : null
+  return { token, outcome, timestamp, tickSize: decimal(entry.tick_size),
+    minOrderSize: decimal(entry.min_order_size), bids: levels(entry.bids, -1), asks: levels(entry.asks, 1) }
 }
 
 async function json(url: string): Promise<unknown> {

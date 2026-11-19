@@ -38,7 +38,7 @@ test('rejects mutating API calls', async () => {
 test('journals an unavailable feed without attempting a trade', async t => {
   t.mock.method(globalThis, 'fetch', async () => new Response(null, { status: 503 }))
   const calls: unknown[][] = []
-  await worker.scheduled({ scheduledTime: start }, {
+  await worker.scheduled({ scheduledTime: start + 60_000 }, {
     ASSETS: { fetch: async () => new Response(null) },
     JOURNAL: { prepare(sql) {
       assert.match(sql, /INSERT OR IGNORE/)
@@ -49,6 +49,6 @@ test('journals an unavailable feed without attempting a trade', async t => {
     } },
   })
   assert.equal(calls.length, 1)
-  assert.equal(calls[0][0], start / 60_000)
+  assert.equal(calls[0][0], start / 60_000 + 1)
   assert.equal(calls[0][3], 'Market snapshot unavailable')
 })
