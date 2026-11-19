@@ -6,6 +6,7 @@ export default {
   fetch(request, env) {
     return worker.fetch(request, {
       JOURNAL: env.JOURNAL,
+      PROVIDER_API_KEY: env.PROVIDER_API_KEY,
       ASSETS: {
         async fetch(assetRequest) {
           if (assetRequest.method !== 'GET' && assetRequest.method !== 'HEAD') {

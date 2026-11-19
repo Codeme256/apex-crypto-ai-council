@@ -45,3 +45,11 @@ deployment dry run with an output directory, upload the compiled Worker as
 `JOURNAL` and set the one-minute schedule. Roll back by restoring the previous
 Worker deployment version. The migrations are additive and survive a Worker
 rollback.
+
+## APInex Grok notes
+
+Apply migration 0003 and set the Cloudflare Worker secret `PROVIDER_API_KEY`.
+The Worker requests one Grok order-book summary per hour at minute 02 UTC
+when both books are usable. A unique D1 row prevents duplicate charges on
+cron retries. The notes use public quotes, have no order permissions, and
+are independent of trade checks. Remove the secret to stop provider calls.

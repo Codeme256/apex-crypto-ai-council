@@ -3,7 +3,12 @@ import { createRoot } from 'react-dom/client'
 import type { Snapshot } from '../worker/market.ts'
 import './style.css'
 
-type Desk = Snapshot & { journalEnabled: boolean; lastRun?: { observed_at: number; decision: string } }
+type Desk = Snapshot & {
+  journalEnabled: boolean
+  lastRun?: { observed_at: number; decision: string }
+  analysisConfigured: boolean
+  analysis?: { observed_at: number; status: string; summary: string | null }
+}
 const roles = [
   ['Spotter', 'Market and data checks'], ['Prior', 'Calibrated probability'],
   ['Edge', 'Net executable value'], ['Kelly', 'Risk and sizing'],
@@ -88,9 +93,16 @@ function App() {
       <ul>
         <li>Exact BTC settlement feed and price chart pending authentication and verification.</li>
         <li>Probability model pending walk-forward calibration against resolved market data.</li>
-        <li>Grok analysis, Demo fills and settlement pending integration.</li>
+        <li>Automated Demo fills and settlement pending integration.</li>
         <li>Live execution disarmed. Owner onboarding and venue preflight are required.</li>
       </ul>
+    </section>
+    <section className="panel"><h2>Grok market notes</h2>
+      <p>{!desk?.analysisConfigured ? 'Waiting for the APInex Worker secret.' :
+        desk.analysis?.summary ?? (desk.analysis?.status === 'unavailable' ?
+          'Latest provider request unavailable.' : 'Waiting for the next hourly analysis.')}</p>
+      {desk?.analysisConfigured && desk.analysis?.summary &&
+        <p>Quotes observed {formatTime(desk.analysis.observed_at, 'UTC')} UTC</p>}
     </section>
     <div className="grid">
       <section className="panel"><h2>Demo portfolio</h2><div className="amount">$1,000.00</div>

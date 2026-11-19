@@ -1,6 +1,8 @@
+import { describeBooks } from './analysis.ts'
 import { snapshot } from './market.ts'
 
 interface Env {
+  PROVIDER_API_KEY?: string
   ASSETS: { fetch(request: Request): Promise<Response> }
   JOURNAL?: { prepare(sql: string): {
     bind(...values: unknown[]): { run(): Promise<unknown> }
@@ -20,7 +22,11 @@ export default {
       const lastRun = await env.JOURNAL?.prepare(
         'SELECT observed_at, decision FROM decisions ORDER BY observed_at DESC LIMIT 1'
       ).first()
-      return Response.json({ ...desk, lastRun, journalEnabled: !!env.JOURNAL }, { headers })
+      const analysis = await env.JOURNAL?.prepare(
+        'SELECT observed_at, status, summary FROM provider_analysis ORDER BY run_key DESC LIMIT 1'
+      ).first()
+      return Response.json({ ...desk, lastRun, journalEnabled: !!env.JOURNAL,
+        analysis, analysisConfigured: Boolean(env.PROVIDER_API_KEY) }, { headers })
     } catch {
       return Response.json({ error: 'Market snapshot unavailable', observedAt: Date.now() }, { status: 503, headers })
     }
@@ -34,6 +40,20 @@ export default {
       'INSERT OR IGNORE INTO decisions (run_key, observed_at, market_slug, decision, snapshot_json) VALUES (?, ?, ?, ?, ?)'
     ).bind(key, desk?.observedAt ?? Date.now(), desk?.market.slug ?? null,
       desk?.skipped ?? 'Market snapshot unavailable', desk ? JSON.stringify(desk) : null).run()
+    if (key % 60 === 2 && env.PROVIDER_API_KEY && desk?.books.length === 2 &&
+        Date.now() - event.scheduledTime < 60_000) {
+      // Claim the hourly budget before calling the provider, including on cron retries.
+      const claimed = await env.JOURNAL.prepare(
+        "INSERT INTO provider_analysis VALUES (?, ?, 'running', NULL) ON CONFLICT DO NOTHING RETURNING run_key"
+      ).bind(key, desk.observedAt).run() as { results?: unknown[] }
+      if (claimed.results?.length) {
+        let summary: string | null = null
+        try { summary = await describeBooks(env.PROVIDER_API_KEY, desk) } catch { /* Record failure without leaking provider details. */ }
+        await env.JOURNAL.prepare(
+          'UPDATE provider_analysis SET status = ?, summary = ? WHERE run_key = ?'
+        ).bind(summary ? 'complete' : 'unavailable', summary, key).run()
+      }
+    }
     if (key % 60 === 0) {
       await env.JOURNAL.prepare('DELETE FROM decisions WHERE run_key < ?')
         .bind(key - 30 * 24 * 60).run()
