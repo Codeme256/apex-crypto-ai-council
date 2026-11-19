@@ -1,0 +1,10 @@
+{
+  "name": "apex-btc-trading-desk",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-11-19",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  }
+}
