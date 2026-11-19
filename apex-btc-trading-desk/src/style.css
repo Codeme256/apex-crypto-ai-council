@@ -22,3 +22,21 @@ td:first-child,th:first-child{text-align:left}
 .book{margin-top:16px}
 @media(max-width:800px){.agents{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:600px){main{padding:24px 14px}.grid{grid-template-columns:1fr;gap:0}.agents{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.workflow{overflow:hidden;background:radial-gradient(ellipse at 50% 40%,#182942 0%,#121a29 62%)}
+.orbit{position:relative;width:min(100%,24rem);aspect-ratio:1;margin:0 auto;container-type:inline-size}
+.orbit-track,.orbit-node,.orbit-core{position:absolute;left:50%;top:50%}
+.orbit-track{width:68%;aspect-ratio:1;border:1px solid #41617e;border-radius:50%;transform:translate(-50%,-50%)}
+.orbit-track::after{content:"";position:absolute;inset:-2px;border:2px solid transparent;border-top-color:#67efd4;border-right-color:#688cff;border-radius:50%;animation:desk-orbit 10s linear infinite;opacity:.7}
+.orbit-track-inner{width:51%;border-style:dashed;opacity:.5}
+.orbit-track-inner::after{animation-direction:reverse;animation-duration:16s;border-top-color:#ad94ff;border-right-color:transparent}
+.orbit-core{width:34%;aspect-ratio:1;transform:translate(-50%,-50%);display:grid;place-content:center;text-align:center;gap:.3rem;border:1px solid #67efd477;border-radius:50%;background:#0b1527;box-shadow:0 0 28px #4bdddc2b}
+.orbit-core b{font-size:clamp(1.15rem,8cqw,2.1rem);letter-spacing:.1em}
+.orbit-core span{font:600 clamp(.5rem,2.8cqw,.7rem) ui-monospace,monospace;color:#67efd4;letter-spacing:.06em}
+.orbit-node{transform:translate(-50%,-50%) rotate(var(--angle)) translateY(-34cqw) rotate(calc(-1 * var(--angle)));z-index:1;color:hsl(var(--hue) 85% 76%);white-space:nowrap}
+.orbit-node span{display:block;font:700 clamp(.61rem,3cqw,.8rem) ui-monospace,monospace;padding:.38rem .63rem;border-radius:99px;border:1px solid hsl(var(--hue) 55% 52%);background:#0b1320}
+.orbit-node[data-observing="true"] span{animation:desk-observed 2s ease-in-out infinite}
+.workflow-sequence{text-align:center;display:flex;justify-content:center;gap:.7rem;flex-wrap:wrap;color:#c8d6ea;font-size:.9rem}
+.workflow-sequence span{color:#67efd4}
+@keyframes desk-orbit{to{transform:rotate(1turn)}}
+@keyframes desk-observed{50%{box-shadow:0 0 18px #67efd478}}
+@media(prefers-reduced-motion:reduce){.orbit-track::after,.orbit-node[data-observing="true"] span{animation:none}}

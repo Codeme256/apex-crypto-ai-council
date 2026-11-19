@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { Snapshot } from '../worker/market.ts'
 import './style.css'
@@ -65,10 +65,25 @@ function App() {
         </div>) : <p>Waiting for fresh executable quotes.</p>}
       </section>
     </div>
-    <section className="panel"><h2>Six-agent workflow</h2><div className="agents">
-      {roles.map(([name, purpose], i) => <div className="agent" key={name}><h3>{name}</h3><p>{purpose}</p>
-        <small>{i === 0 && freshBooks.length === 2 ? 'Quotes observed' : 'Blocked'}</small></div>)}
-    </div></section>
+    <section className="panel workflow">
+      <div className="section-heading"><h2>Six-agent workflow</h2>
+        <span className="badge">{desk?.lastRun ? 'SCHEDULED RUN RECORDED' : 'AWAITING SCHEDULED RUN'}</span>
+      </div>
+      <div className="orbit" aria-hidden="true">
+        <div className="orbit-track" /><div className="orbit-track orbit-track-inner" />
+        <div className="orbit-core"><b>APEX</b><span>{freshBooks.length === 2 ? 'OBSERVING' : 'STANDBY'}</span></div>
+        {roles.map(([name], index) => <div className="orbit-node" key={name}
+          data-observing={index === 0 && freshBooks.length === 2}
+          style={{ '--angle': (index * 60) + 'deg', '--hue': [169, 218, 270, 42, 12, 316][index] } as CSSProperties}>
+          <span>{name}</span>
+        </div>)}
+      </div>
+      <div className="workflow-sequence">Direction <span>→</span> Strength <span>→</span> Filter</div>
+      <div className="agents">
+        {roles.map(([name, purpose], i) => <div className="agent" key={name}><h3>{name}</h3><p>{purpose}</p>
+          <small>{i === 0 && freshBooks.length === 2 ? 'Quotes observed' : 'Blocked'}</small></div>)}
+      </div>
+    </section>
     <section className="panel"><h2>Trading readiness</h2>
       <ul>
         <li>Exact BTC settlement feed and price chart pending authentication and verification.</li>
