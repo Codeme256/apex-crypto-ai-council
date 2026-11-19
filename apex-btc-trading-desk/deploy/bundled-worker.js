@@ -7,6 +7,7 @@ export default {
     return worker.fetch(request, {
       JOURNAL: env.JOURNAL,
       PROVIDER_API_KEY: env.PROVIDER_API_KEY,
+      APINEX_VARIABLE: env.APINEX_VARIABLE,
       ASSETS: {
         async fetch(assetRequest) {
           if (assetRequest.method !== 'GET' && assetRequest.method !== 'HEAD') {

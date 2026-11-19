@@ -48,7 +48,7 @@ rollback.
 
 ## APInex Grok notes
 
-Apply migration 0003 and set the Cloudflare Worker secret `PROVIDER_API_KEY`.
+Apply migration 0003 and set the Cloudflare Worker secret `PROVIDER_API_KEY` or `APINEX_VARIABLE`.
 The Worker requests one Grok order-book summary per hour at minute 02 UTC
 when both books are usable. A unique D1 row prevents duplicate charges on
 cron retries. The notes use public quotes, have no order permissions, and
